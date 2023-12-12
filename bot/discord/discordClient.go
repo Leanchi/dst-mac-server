@@ -11,7 +11,7 @@ import (
 	"syscall"
 )
 
-const Token = "REMOVED_UPSTREAM_DISCORD_TOKEN"
+const Token = ""
 
 var gameArchive = service.GameArchive{}
 var playerService = service.PlayerService{}
