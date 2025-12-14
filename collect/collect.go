@@ -79,20 +79,31 @@ func (c *Collect) StartCollect() {
 
 func (c *Collect) parseSpawnRequestLog(text string) {
 	defer func() {
-		if err := recover(); err != nil {
-			log.Println(text)
-			log.Println("玩家角色日志解析异常:", err)
+		if r := recover(); r != nil {
+			log.Printf("Spawn request Log text: %s\n", text)
+			log.Printf("玩家角色日志解析异常: %v\n", r)
 		}
 	}()
-	// Spawn request: wurt from 猜猜我是谁
-	arr := strings.Split(text, " ")
-	temp := strings.Replace(arr[0], " ", "", -1)
-	t := temp[:len(temp)-1]
-	role := strings.Replace(arr[3], " ", "", -1)
-	name := strings.Replace(arr[5], "\n", "", -1)
+
+	// 捕获 (1)时间, (2)动作, (3)角色, (4)玩家名
+	re := regexp.MustCompile(`^\[([^\]]+)\]:\s*(.*?):\s*(\w+)\s*from\s*(.+)$`)
+	matches := re.FindStringSubmatch(text)
+
+	if len(matches) != 5 {
+		// 如果日志格式不匹配，直接退出
+		log.Printf("Spawn request 日志格式不匹配: %s\n", text)
+		return
+	}
+
+	t := matches[1] // 00:37:41
+	// action := matches[2] // Spawn request
+	role := matches[3] // winona
+	name := strings.TrimSpace(matches[4])
 
 	spawn := model.Spawn{Name: name, Role: role, Time: t, ClusterName: c.clusterName}
-	database.DB.Create(&spawn)
+	if err := database.DB.Create(&spawn).Error; err != nil {
+		log.Printf("插入玩家 Spawn 日志失败: %v\n", err)
+	}
 }
 
 func (c *Collect) parseRegenerateLog(text string) {
@@ -307,20 +318,55 @@ func (c *Collect) parseResurrect(text string) {
 
 func (c *Collect) parseDeath(text string) {
 	fmt.Println(text)
-	arr := strings.Split(text, " ")
 
-	temp := strings.Replace(arr[0], " ", "", -1)
-	t := temp[:len(temp)-1]
-	action := arr[1] + arr[2]
-	name := strings.Replace(arr[3], "\n", "", -1)
-
-	rest := ""
-	for i := 4; i <= len(arr)-1; i++ {
-		rest += arr[i] + " "
+	// 正则表达式 (1)时间, (2)动作, (3)剩余所有内容
+	re := regexp.MustCompile(`^\[([^\]]+)\]:\s*(\[[^\]]+\])\s*(.*)$`)
+	matches := re.FindStringSubmatch(text)
+	if len(matches) != 4 {
+		log.Println("无法解析 Announcement Log (正则不匹配):", text)
+		return
 	}
-	actionDesc := rest
 
-	//获取最近的一条spwan记录和newComing
+	t := matches[1]
+	action := matches[2]
+	// 擦屁股
+	action = strings.ReplaceAll(action, " ", "")
+	rest := strings.TrimSpace(matches[3]) // 名字 + 描述 整体
+
+	var name string
+	var actionDesc string
+
+	// 死亡/复活的分隔符列表 (支持中英文)
+	// 关键：在 Death Announce 和 Resurrect Announce 之间寻找共同的分隔模式
+	// 中文：死于： / 复活自：
+	// 英文：died from / resurrected from / revived by
+	announcementWords := []string{
+		"死于：", "died from", "was killed by", "starved", "suicide", // 死亡
+		"复活自：", "resurrected from", "revived by", // 复活
+	}
+
+	splitIndex := -1
+	for _, word := range announcementWords {
+		// 查找分隔符
+		idx := strings.Index(rest, word)
+		if idx > splitIndex { // 找到最靠前的已知分隔符
+			splitIndex = idx
+			// 找到后立即退出循环，因为第一个匹配就是名字和描述的边界
+			break
+		}
+	}
+
+	if splitIndex != -1 {
+		// 找到了分隔符：分割 rest
+		name = strings.TrimSpace(rest[:splitIndex])
+		actionDesc = strings.TrimSpace(rest[splitIndex:])
+	} else {
+		// 未找到已知分隔符，假设整个 rest 都是名字，描述为空 (适用于名字很长，或系统消息)
+		name = rest
+		actionDesc = ""
+		fmt.Println("Announcement Log 未找到分隔符，将全部分配给 Name:", name)
+	}
+
 	spawn := c.getSpawnRole(name)
 	connect := c.getConnectInfo(name)
 	fmt.Println(connect)
@@ -337,8 +383,9 @@ func (c *Collect) parseDeath(text string) {
 		ClusterName: c.clusterName,
 	}
 
-	database.DB.Create(&playerLog)
-
+	if err := database.DB.Create(&playerLog).Error; err != nil {
+		fmt.Println("插入玩家日志失败:", err)
+	}
 }
 
 func (c *Collect) parseLeave(text string) {
@@ -347,11 +394,24 @@ func (c *Collect) parseLeave(text string) {
 
 func (c *Collect) parseJoin(text string) {
 	fmt.Println(text)
-	arr := strings.Split(text, " ")
-	temp := strings.Replace(arr[0], " ", "", -1)
-	t := temp[:len(temp)-1]
-	action := arr[1] + arr[2]
-	name := arr[3]
+
+	// 正则表达式：捕获 (1)时间, (2)动作, (3)玩家名
+	re := regexp.MustCompile(`^\[([^\]]+)\]:\s*(\[[^\]]+\])\s*(.+)$`)
+	matches := re.FindStringSubmatch(text)
+
+	// 预期匹配 4 组：[完整匹配, 时间, 动作, 玩家名]
+	if len(matches) != 4 {
+		log.Println("无法解析 Join Log (正则不匹配):", text)
+		return
+	}
+
+	// 捕获结果
+	t := matches[1]      // 时间: 00:01:43
+	action := matches[2] // 动作: [Join Announcement]
+	// 擦屁股
+	action = strings.ReplaceAll(action, " ", "")
+	// 玩家名字是捕获组 3，使用 strings.TrimSpace 确保名字前后没有多余空格
+	name := strings.TrimSpace(matches[3])
 
 	spawn := c.getSpawnRole(name)
 	connect := c.getConnectInfo(name)
@@ -366,7 +426,11 @@ func (c *Collect) parseJoin(text string) {
 		SteamId:     connect.SteamId,
 		ClusterName: c.clusterName,
 	}
-	database.DB.Create(&playerLog)
+
+	// 保存到数据库，并打印错误
+	if err := database.DB.Create(&playerLog).Error; err != nil {
+		fmt.Println("插入玩家日志失败:", err)
+	}
 }
 
 func (c *Collect) tailServerChatLog(fileName string) {
