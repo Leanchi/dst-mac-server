@@ -1,18 +1,24 @@
 package service
 
 import (
+	"context"
 	"dst-admin-go/constant/screenKey"
 	"dst-admin-go/utils/collectionUtils"
 	"dst-admin-go/utils/dstUtils"
 	"dst-admin-go/utils/fileUtils"
 	"dst-admin-go/utils/shellUtils"
 	"dst-admin-go/vo"
+	"fmt"
 	"log"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hpcloud/tail"
 )
 
 type result struct {
@@ -214,29 +220,55 @@ type PlayerService struct {
 }
 
 func (p *PlayerService) GetPlayerList(clusterName string, levelName string) []vo.PlayerVO {
-	status := false
+	originalLevelName := levelName
 	if levelName == "#ALL_LEVEL" {
-		status = gameServe.GetLevelStatus(clusterName, "Master")
-	} else {
-		status = gameServe.GetLevelStatus(clusterName, levelName)
+		levelName = "Master"
 	}
 
+	status := gameServe.GetLevelStatus(clusterName, levelName)
 	if !status {
 		return make([]vo.PlayerVO, 0)
 	}
 
-	id := strconv.FormatInt(time.Now().Unix(), 10)
+	// 步骤 1: 准备唯一ID和结束信号
+	id := fmt.Sprintf("req-%d", time.Now().UnixNano())
+	endSignal := fmt.Sprintf("end-signal-for-%s", id)
 
-	// command := "for i, v in ipairs(TheNet:GetClientTable()) do  print(string.format(\\\"%s %d %s %s %s %s \\\", " + "'" + id + "'" + ",i-1, string.format('%03d', v.playerage), v.userid, v.name, v.prefab)) end"
-	// command := "for i, v in ipairs(AllPlayers) do  print(string.format(\\\"%s %d %s %s %s %s \\\", " + "'" + id + "'" + ",i-1, string.format('%03d', v.playerage), v.userid, v.name, v.prefab)) end"
-
+	// 步骤 2: 修改Command生成逻辑
 	command := ""
-	if levelName == "#ALL_LEVEL" {
+	endCommand := fmt.Sprintf("; print(\\\"%s\\\")", endSignal)
+
+	if originalLevelName == "#ALL_LEVEL" {
 		levelName = "Master"
-		command = "for i, v in ipairs(TheNet:GetClientTable()) do  print(string.format(\\\"player: {[%s] [%d] [%s] [%s] [%s] [%s]} \\\", " + "'" + id + "'" + ",i-1, string.format('%03d', v.playerage), v.userid, v.name, v.prefab)) end"
+		baseCommand := "for i, v in ipairs(TheNet:GetClientTable()) do  print(string.format(\\\"player: {[%s] [%d] [%s] [%s] [%s] [%s]} \\\", " + "'" + id + "'" + ",i-1, string.format('%03d', v.playerage), v.userid, v.name, v.prefab)) end"
+		//baseCommand := fmt.Sprintf("for i, v in ipairs(TheNet:GetClientTable()) do print(string.format(\\\"player: {[%s] [%d] [%s] [%s] [%s] [%s]} \\\", '%s', i-1, string.format('%%03d', v.playerage), v.userid, v.name, v.prefab)) end", id, id)
+		command = baseCommand + endCommand
 	} else {
-		command = "for i, v in ipairs(AllPlayers) do print(string.format(\\\"player: {[%d] [%d] [%d] [%s] [%s] [%s]} \\\", " + id + ",i,v.components.age:GetAgeInDays(), v.userid, v.name, v.prefab)) end"
+		//baseCommand := fmt.Sprintf("for i, v in ipairs(AllPlayers) do print(string.format(\\\"player: {[%s] [%d] [%d] [%s] [%s] [%s]} \\\", '%s', i,v.components.age:GetAgeInDays(), v.userid, v.name, v.prefab)) end", id, id)
+		baseCommand := "for i, v in ipairs(AllPlayers) do print(string.format(\\\"player: {[%s] [%d] [%d] [%s] [%s] [%s]} \\\", " + "'" + id + "'" + ",i,v.components.age:GetAgeInDays(), v.userid, v.name, v.prefab)) end"
+		command = baseCommand + endCommand
 	}
+
+	// 步骤 3: 替换核心逻辑
+	// -------------------- 新逻辑开始 --------------------
+	//logFilePath := dstUtils.GetLevelLogPath(clusterName, levelName) // 假设你有这么一个函数获取日志路径
+	logFilePath := filepath.Join(dstUtils.GetClusterBasePath(clusterName), levelName, "server_log.txt")
+	t, err := tail.TailFile(logFilePath, tail.Config{
+		Location:  &tail.SeekInfo{Offset: 0, Whence: 2},
+		MustExist: true,
+		Follow:    true,
+	})
+	if err != nil {
+		log.Printf("错误：无法追踪日志文件 %s: %v", logFilePath, err)
+		return make([]vo.PlayerVO, 0)
+	}
+	defer t.Stop()
+
+	// 设置一个10秒的超时作为安全网
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 发送命令 (你原有的逻辑)
 	if isWindows() {
 		clusterContainer.Send(clusterName, levelName, command)
 	} else {
@@ -244,67 +276,70 @@ func (p *PlayerService) GetPlayerList(clusterName string, levelName string) []vo
 		shellUtils.Shell(playerCMD)
 	}
 
-	time.Sleep(time.Duration(1) * time.Second)
+	log.Printf("[命令已发送] 开始监听日志中的 ID: %s", id)
+	uniquePlayers := make(map[string]vo.PlayerVO) // 使用map实现自动去重
 
-	// 读取日志
-	dstLogs := dstUtils.ReadLevelLog(clusterName, levelName, 100)
-	playerVOList := make([]vo.PlayerVO, 0)
-
-	//for _, line := range dstLogs {
-	//	if strings.Contains(line, id) && strings.Contains(line, "KU") && !strings.Contains(line, "Host") {
-	//		str := strings.Split(line, " ")
-	//		log.Println("players:", str)
-	//		playerVO := vo.PlayerVO{Key: str[2], Day: str[3], KuId: str[4], Name: str[5], Role: str[6]}
-	//		playerVOList = append(playerVOList, playerVO)
-	//	}
-	//}
-
-	for _, line := range dstLogs {
-		if strings.Contains(line, id) && strings.Contains(line, "KU") && !strings.Contains(line, "Host") {
-			//str := strings.Split(line, " ")
-			//log.Println("players:", str)
-			//playerVO := vo.PlayerVO{Key: str[2], Day: str[3], KuId: str[4], Name: str[5], Role: str[6]}
-			//playerVOList = append(playerVOList, playerVO)
-
-			log.Println(line)
-
-			// 提取 {} 中的内容
-			reCurlyBraces := regexp.MustCompile(`\{([^}]*)\}`)
-			curlyBracesMatches := reCurlyBraces.FindStringSubmatch(line)
-
-			if len(curlyBracesMatches) > 1 {
-				// curlyBracesMatches[1] 包含 {} 中的内容
-				contentInsideCurlyBraces := curlyBracesMatches[1]
-
-				// 提取 [] 中的内容
-				reSquareBrackets := regexp.MustCompile(`\[([^\]]*)\]`)
-				squareBracketsMatches := reSquareBrackets.FindAllStringSubmatch(contentInsideCurlyBraces, -1)
-				var result []string
-				for _, match := range squareBracketsMatches {
-					// match[1] 包含 [] 中的内容
-					contentInsideSquareBrackets := match[1]
-					result = append(result, contentInsideSquareBrackets)
-				}
-				playerVO := vo.PlayerVO{Key: result[1], Day: result[2], KuId: result[3], Name: result[4], Role: result[5]}
-				playerVOList = append(playerVOList, playerVO)
+	for {
+		select {
+		case line, ok := <-t.Lines:
+			if !ok {
+				log.Printf("[日志追踪] tail channel 已关闭，即将退出。")
+				goto EndLoop
 			}
+
+			// 如果是服务器的命令回显日志 或者是主机，则直接跳过，等待下一行
+			if strings.Contains(line.Text, "RemoteCommandInput") || strings.Contains(line.Text, "Host") {
+				continue
+			}
+
+			// 检查是否是结束信号
+			if strings.Contains(line.Text, endSignal) {
+				log.Printf("[信号捕获] 成功匹配到结束信号 for ID: %s", id)
+				goto EndLoop
+			}
+
+			// 检查是否是数据信号
+			if strings.Contains(line.Text, id) && strings.Contains(line.Text, "KU") {
+				// 正则解析逻辑
+				reCurlyBraces := regexp.MustCompile(`\{([^}]*)\}`)
+				curlyBracesMatches := reCurlyBraces.FindStringSubmatch(line.Text)
+				if len(curlyBracesMatches) > 1 {
+					contentInsideCurlyBraces := curlyBracesMatches[1]
+					reSquareBrackets := regexp.MustCompile(`\[([^\]]*)\]`)
+					squareBracketsMatches := reSquareBrackets.FindAllStringSubmatch(contentInsideCurlyBraces, -1)
+					var result []string
+					for _, match := range squareBracketsMatches {
+						result = append(result, match[1])
+					}
+					if len(result) >= 6 {
+						playerVO := vo.PlayerVO{Key: result[1], Day: result[2], KuId: result[3], Name: result[4], Role: result[5]}
+						uniquePlayers[playerVO.KuId] = playerVO
+					}
+				}
+			}
+		case <-ctx.Done():
+			log.Printf("警告：在超时前未收到结束信号 for ID: %s。可能命令执行失败或服务器繁忙。", id)
+			goto EndLoop
 		}
 	}
 
-	// 创建一个map，用于存储不重复的KuId和对应的PlayerVO对象
-	uniquePlayers := make(map[string]vo.PlayerVO)
-
-	// 遍历players切片
-	for _, player := range playerVOList {
-		// 将PlayerVO对象添加到map中，以KuId作为键
-		uniquePlayers[player.KuId] = player
-	}
-
-	// 将不重复的PlayerVO对象从map中提取到新的切片中
+EndLoop:
+	// 7. 将去重后的map转换为slice返回
+	log.Printf("监控结束 for ID: %s。共捕获到 %d 名不重复的玩家。", id, len(uniquePlayers))
 	filteredPlayers := make([]vo.PlayerVO, 0, len(uniquePlayers))
 	for _, player := range uniquePlayers {
 		filteredPlayers = append(filteredPlayers, player)
 	}
+
+	// --- 8. (新增的关键步骤) 对最终的 slice 按 KuId 进行排序 ---
+	sort.Slice(filteredPlayers, func(i, j int) bool {
+		// 返回 true 表示 i 应该排在 j 前面
+		// 这里我们按 KuId 的字母顺序升序排列
+		return filteredPlayers[i].KuId < filteredPlayers[j].KuId
+	})
+	// ----------------------------------------------------
+
+	// 9. 返回一个干净、去重且排序好的列表
 	return filteredPlayers
 
 }
