@@ -1,6 +1,7 @@
 package dstConfig
 
 import (
+	"dst-admin-go/internal/config"
 	"dst-admin-go/internal/pkg/utils/fileUtils"
 	"os"
 	"path/filepath"
@@ -11,15 +12,18 @@ import (
 	"gorm.io/gorm"
 )
 
-const dst_config_path = "./dst_config"
+const DstConfigPath = "dst_config"
 
 type OneDstConfig struct {
-	db *gorm.DB
+	db            *gorm.DB
+	dstConfigPath string
 }
 
 func NewOneDstConfig(db *gorm.DB) OneDstConfig {
+	path := filepath.Join(config.Cfg.DataDir, DstConfigPath)
 	return OneDstConfig{
-		db: db,
+		db:            db,
+		dstConfigPath: path,
 	}
 }
 
@@ -56,12 +60,12 @@ func (o *OneDstConfig) GetDstConfig(clusterName string) (DstConfig, error) {
 	dstConfig := DstConfig{}
 
 	//判断是否存在，不存在创建一个
-	if !fileUtils.Exists(dst_config_path) {
-		if err := fileUtils.CreateFile(dst_config_path); err != nil {
+	if !fileUtils.Exists(o.dstConfigPath) {
+		if err := fileUtils.CreateFile(o.dstConfigPath); err != nil {
 			return dstConfig, err
 		}
 	}
-	data, err := fileUtils.ReadLnFile(dst_config_path)
+	data, err := fileUtils.ReadLnFile(o.dstConfigPath)
 	if err != nil {
 		return dstConfig, err
 	}
@@ -191,7 +195,7 @@ func (o *OneDstConfig) SaveDstConfig(clusterName string, dstConfig DstConfig) er
 		dstConfig.Mod_download_path = oldDstConfig.Mod_download_path
 	}
 
-	err = fileUtils.WriterLnFile(dst_config_path, []string{
+	err = fileUtils.WriterLnFile(o.dstConfigPath, []string{
 		"steamcmd=" + dstConfig.Steamcmd,
 		"force_install_dir=" + dstConfig.Force_install_dir,
 		"donot_starve_server_directory=" + dstConfig.DoNotStarveServerDirectory,

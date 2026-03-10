@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"io/ioutil"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	Port              string `yaml:"port"`
 	Path              string `yaml:"path"`
 	Db                string `yaml:"database"`
+	DataDir           string `yaml:"dataDir"`
 	SteamAPIKey       string `yaml:"steamAPIKey"`
 	Flag              string `yaml:"flag"`
 	WanIP             string `yaml:"wanip"`
@@ -25,14 +27,15 @@ type Config struct {
 }
 
 const (
-	ConfigPath  = "./config.yml"
-	DefaultPort = "8083"
+	DefaultConfigPath = "./config.yml"
+	DefaultPort       = "8082"
+	DefaultDataDir    = "./"
 )
 
 var Cfg *Config
 
 func Load() *Config {
-	yamlFile, err := ioutil.ReadFile(ConfigPath)
+	yamlFile, err := ioutil.ReadFile(DefaultConfigPath)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -44,6 +47,9 @@ func Load() *Config {
 	if c.Port == "" {
 		c.Port = DefaultPort
 	}
+	if c.DataDir == "" {
+		c.DataDir = DefaultDataDir
+	}
 	if c.AutoUpdateModinfo.UpdateCheckInterval == 0 {
 		c.AutoUpdateModinfo.UpdateCheckInterval = 10
 	}
@@ -52,4 +58,9 @@ func Load() *Config {
 	}
 	Cfg = c
 	return c
+}
+
+// GetDbPath 获取数据库文件的完整路径
+func (c *Config) GetDbPath() string {
+	return filepath.Join(c.DataDir, c.Db)
 }

@@ -3,6 +3,7 @@ package database
 import (
 	"dst-admin-go/internal/config"
 	"dst-admin-go/internal/model"
+	"dst-admin-go/internal/pkg/utils/fileUtils"
 	"log"
 
 	"github.com/glebarez/sqlite"
@@ -13,10 +14,16 @@ import (
 var Db *gorm.DB
 
 func InitDB(config *config.Config) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(config.Db), &gorm.Config{
+	dbPath := config.GetDbPath()
+	err := fileUtils.CreateFileIfNotExists(dbPath)
+	if err != nil {
+		log.Println(err)
+	}
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
+		log.Println(err)
 		panic("failed to connect database")
 	}
 	Db = db
