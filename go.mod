@@ -10,6 +10,7 @@ require (
 	github.com/glebarez/sqlite v1.8.0
 	github.com/go-ini/ini v1.67.0
 	github.com/hpcloud/tail v1.0.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
