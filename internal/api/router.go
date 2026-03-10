@@ -17,6 +17,7 @@ import (
 	"dst-admin-go/internal/service/login"
 	"dst-admin-go/internal/service/mod"
 	"dst-admin-go/internal/service/player"
+	"dst-admin-go/internal/service/schedule"
 	"dst-admin-go/internal/service/update"
 	"time"
 
@@ -100,6 +101,7 @@ func Register(cfg *config.Config, db *gorm.DB, router *gin.RouterGroup) {
 	playerService := player.NewPlayerService(resolverService)
 	gameArchiveService := gameArchive.NewGameArchive(gameConfigService, levelService, resolverService)
 	modService := mod.NewModService(db, dstConfigService, resolverService)
+	scheduleService := schedule.NewScheduleService(db, gameProcess, backupService, updateService, dstConfigService)
 
 	dstMapGenerator := dstMap.NewDSTMapGenerator()
 
@@ -122,6 +124,7 @@ func Register(cfg *config.Config, db *gorm.DB, router *gin.RouterGroup) {
 	playerLogHandler := handler.NewPlayerLogHandler()
 	statisticsHandler := handler.NewStatisticsHandler()
 	modHandler := handler.NewModHandler(modService, dstConfigService)
+	scheduleHandler := handler.NewScheduleHandler(scheduleService)
 
 	// 中间件
 	router.Use(middleware.Authentication(loginService))
@@ -143,5 +146,6 @@ func Register(cfg *config.Config, db *gorm.DB, router *gin.RouterGroup) {
 	playerLogHandler.RegisterRoute(router)
 	statisticsHandler.RegisterRoute(router)
 	modHandler.RegisterRoute(router)
+	scheduleHandler.RegisterRoute(router)
 
 }
