@@ -294,21 +294,22 @@ paths:
     get:
       consumes:
       - application/json
-      description: 获取指定世界的详细信息
-      parameters:
-      - description: 世界名称
-        in: query
-        name: levelName
-        required: true
-        type: string
+      description: 获取当前集群的所有世界(等级)列表
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
-      summary: 获取单个世界
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/levelConfig.LevelInfo'
+                  type: array
+              type: object
+      summary: 获取世界列表
       tags:
       - level
     post:

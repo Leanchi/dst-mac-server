@@ -19,7 +19,7 @@
     "paths": {
         "/api/cluster/level": {
             "get": {
-                "description": "获取指定世界的详细信息",
+                "description": "获取当前集群的所有世界(等级)列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -29,21 +29,27 @@
                 "tags": [
                     "level"
                 ],
-                "summary": "获取单个世界",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "世界名称",
-                        "name": "levelName",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
+                "summary": "获取世界列表",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/levelConfig.LevelInfo"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
