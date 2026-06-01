@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"dst-admin-go/internal/config"
 	"dst-admin-go/internal/pkg/utils/fileUtils"
 	"dst-admin-go/internal/service/dstConfig"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type PathResolver struct {
@@ -192,14 +194,18 @@ func (r *PathResolver) GetLocalDstVersion(clusterName string) (int64, error) {
 }
 
 func (r *PathResolver) GetLastDstVersion() (int64, error) {
-	url := "http://ver.tugos.cn/getLocalVersion"
-	resp, err := http.Get(url)
+	url := config.Cfg.DstVersionUrl
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		log.Println(err)
+		return -1, err
 	}
+	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Println(err)
+		return -1, err
 	}
 	s := string(body)
 	veriosn, err := strconv.Atoi(s)

@@ -19,6 +19,7 @@ type Config struct {
 	WanIP             string `yaml:"wanip"`
 	WhiteAdminIP      string `yaml:"whiteadminip"`
 	Token             string `yaml:"token"`
+	DstVersionUrl     string `yaml:"dstVersionUrl"`
 	AutoUpdateModinfo struct {
 		Enable              bool `yaml:"enable"`
 		CheckInterval       int  `yaml:"checkInterval"`
@@ -55,6 +56,9 @@ func Load() *Config {
 	}
 	if c.AutoUpdateModinfo.CheckInterval == 0 {
 		c.AutoUpdateModinfo.CheckInterval = 5
+	}
+	if c.DstVersionUrl == "" {
+		c.DstVersionUrl = "http://ver.tugos.cn/getLocalVersion"
 	}
 	Cfg = c
 	return c
