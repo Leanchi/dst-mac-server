@@ -39,6 +39,93 @@ const (
 	language    = 6
 )
 
+func steamAuthorProfileURL(steamID string) string {
+	if steamID == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://steamcommunity.com/profiles/%s/", steamID)
+}
+
+func steamIDFromAuthor(author string) string {
+	author = strings.TrimSpace(author)
+	if author == "" {
+		return ""
+	}
+	if matched, _ := regexp.MatchString(`^\d{17}$`, author); matched {
+		return author
+	}
+	re := regexp.MustCompile(`profiles/(\d{17})`)
+	matches := re.FindStringSubmatch(author)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
+}
+
+func fetchSteamPersonaNames(steamIDs []string) map[string]string {
+	result := make(map[string]string)
+	seen := make(map[string]bool)
+	unique := make([]string, 0, len(steamIDs))
+	for _, steamID := range steamIDs {
+		steamID = steamIDFromAuthor(steamID)
+		if steamID == "" || seen[steamID] {
+			continue
+		}
+		seen[steamID] = true
+		unique = append(unique, steamID)
+	}
+	if len(unique) == 0 {
+		return result
+	}
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	for i := 0; i < len(unique); i += 100 {
+		end := i + 100
+		if end > len(unique) {
+			end = len(unique)
+		}
+		data := url.Values{}
+		data.Set("key", steamAPIKey)
+		data.Set("steamids", strings.Join(unique[i:end], ","))
+		urlStr := "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?" + data.Encode()
+		resp, err := client.Get(urlStr)
+		if err != nil {
+			continue
+		}
+		func() {
+			defer resp.Body.Close()
+			var payload struct {
+				Response struct {
+					Players []struct {
+						SteamID     string `json:"steamid"`
+						PersonaName string `json:"personaname"`
+					} `json:"players"`
+				} `json:"response"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+				return
+			}
+			for _, player := range payload.Response.Players {
+				if player.SteamID != "" && player.PersonaName != "" {
+					result[player.SteamID] = player.PersonaName
+				}
+			}
+		}()
+	}
+	return result
+}
+
+func steamPersonaName(steamID string) string {
+	steamID = steamIDFromAuthor(steamID)
+	if steamID == "" {
+		return ""
+	}
+	if names := fetchSteamPersonaNames([]string{steamID}); names[steamID] != "" {
+		return names[steamID]
+	}
+	return steamID
+}
+
 type ModService struct {
 	db           *gorm.DB
 	dstConfig    dstConfig.Config
@@ -196,15 +283,11 @@ func (s *ModService) SearchModList(text string, page, size int, lang string) (*S
 			modInfo := modInfoRaw.(map[string]interface{})
 			img := modInfo["preview_url"].(string)
 			voteData := modInfo["vote_data"].(map[string]interface{})
-			auth := modInfo["creator"].(string)
-			var authorURL string
-			if auth != "" {
-				authorURL = fmt.Sprintf("https://steamcommunity.com/profiles/%s/?xml=1", auth)
-			}
+			auth := fmt.Sprintf("%v", modInfo["creator"])
 			mod := ModInfo{
 				ID:     fmt.Sprintf("%v", modInfo["publishedfileid"]),
 				Name:   fmt.Sprintf("%v", modInfo["title"]),
-				Author: authorURL,
+				Author: auth,
 				Desc:   fmt.Sprintf("%v", modInfo["file_description"]),
 				Time:   int(modInfo["time_updated"].(float64)),
 				Sub:    int(modInfo["subscriptions"].(float64)),
@@ -226,6 +309,17 @@ func (s *ModService) SearchModList(text string, page, size int, lang string) (*S
 				mod.Child = child
 			}
 			modList = append(modList, mod)
+		}
+	}
+
+	authorIDs := make([]string, 0, len(modList))
+	for _, mod := range modList {
+		authorIDs = append(authorIDs, mod.Author)
+	}
+	authorNames := fetchSteamPersonaNames(authorIDs)
+	for i := range modList {
+		if name := authorNames[steamIDFromAuthor(modList[i].Author)]; name != "" {
+			modList[i].Author = name
 		}
 	}
 
@@ -278,16 +372,11 @@ func (s *ModService) SubscribeModByModId(clusterName, modId, lang string) (*mode
 
 	data2 := dataList[0].(map[string]interface{})
 	img := data2["preview_url"].(string)
-	auth := data2["creator"].(string)
-	var authorURL string
-	if auth != "" {
-		authorURL = fmt.Sprintf("https://steamcommunity.com/profiles/%s/?xml=1", auth)
-	}
+	auth := steamPersonaName(data2["creator"].(string))
 
 	name := data2["title"].(string)
 	lastTime := data2["time_updated"].(float64)
 	description := data2["file_description"].(string)
-	auth = authorURL
 	fileUrl := data2["file_url"]
 	img = fmt.Sprintf("%s?imw=64&imh=64&ima=fit&impolicy=Letterbox&imcolor=%%23000000&letterbox=true", img)
 	v := s.getVersion(data2["tags"])
@@ -363,7 +452,22 @@ func (s *ModService) SubscribeModByModId(clusterName, modId, lang string) (*mode
 func (s *ModService) GetMyModList() ([]model.ModInfo, error) {
 	var modInfos []model.ModInfo
 	err := s.db.Find(&modInfos).Error
-	return modInfos, err
+	if err != nil {
+		return modInfos, err
+	}
+	authorIDs := make([]string, 0, len(modInfos))
+	for _, modInfo := range modInfos {
+		if steamID := steamIDFromAuthor(modInfo.Auth); steamID != "" {
+			authorIDs = append(authorIDs, steamID)
+		}
+	}
+	authorNames := fetchSteamPersonaNames(authorIDs)
+	for i := range modInfos {
+		if name := authorNames[steamIDFromAuthor(modInfos[i].Auth)]; name != "" {
+			modInfos[i].Auth = name
+		}
+	}
+	return modInfos, nil
 }
 
 // GetModByModId 根据modId获取模组
@@ -897,11 +1001,7 @@ func (s *ModService) searchModInfoByWorkshopId(modID int) ModInfo {
 	}
 
 	img := data2["preview_url"].(string)
-	auth := data2["creator"].(string)
-	var authorURL string
-	if auth != "" {
-		authorURL = fmt.Sprintf("https://steamcommunity.com/profiles/%s/?xml=1", auth)
-	}
+	auth := steamPersonaName(data2["creator"].(string))
 
 	modId := data2["publishedfileid"].(string)
 	name := data2["title"].(string)
@@ -911,7 +1011,7 @@ func (s *ModService) searchModInfoByWorkshopId(modID int) ModInfo {
 	return ModInfo{
 		ID:     modId,
 		Name:   name,
-		Author: authorURL,
+		Author: auth,
 		Desc:   description,
 		Time:   int(data2["time_updated"].(float64)),
 		Sub:    int(data2["subscriptions"].(float64)),
@@ -1014,11 +1114,7 @@ func (s *ModService) getModInfo2(modID string) (*model.ModInfo, error) {
 
 	data2 := dataList[0].(map[string]interface{})
 	img := data2["preview_url"].(string)
-	auth := data2["creator"].(string)
-	var authorURL string
-	if auth != "" {
-		authorURL = fmt.Sprintf("https://steamcommunity.com/profiles/%s/?xml=1", auth)
-	}
+	auth := steamPersonaName(data2["creator"].(string))
 
 	modId := data2["publishedfileid"].(string)
 	name := data2["title"].(string)
@@ -1036,7 +1132,7 @@ func (s *ModService) getModInfo2(modID string) (*model.ModInfo, error) {
 	}
 
 	return &model.ModInfo{
-		Auth:          authorURL,
+		Auth:          auth,
 		ConsumerAppid: consumerAppid,
 		CreatorAppid:  creatorAppid,
 		Description:   description,
