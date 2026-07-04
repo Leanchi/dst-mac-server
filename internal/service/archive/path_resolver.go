@@ -22,8 +22,10 @@ type PathResolver struct {
 
 func NewPathResolver(dstConfig dstConfig.Config) (*PathResolver, error) {
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
+	if err != nil || home == "" {
+		// systemd services can run without HOME set; keep the resolver usable so
+		// configured persistent_storage_root paths still work.
+		home = "/root"
 	}
 
 	return &PathResolver{
