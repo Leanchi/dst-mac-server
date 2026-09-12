@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/09-12-dst-mac-arm-server/research/upstream-code-verification.md", "reason": "核对实现是否破坏上游路径契约（模组产物路径、beta 平行目录 -beta 后缀、Windows 分支零改动）与既有行为语义（失败重试一次、已存在跳过）"}
+{"file": ".trellis/tasks/09-12-dst-mac-arm-server/research/depotdownloader-integration.md", "reason": "核对 DD 调用参数映射与 -dir 落盘假设是否按研究结论实现；steamclient.so 不执行 i386、amd64 运行库完整性的验收依据"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查是否存在重复实现上游已有能力的代码（如重新实现重试/转义/路径处理）"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 Go 侧与 Docker entrypoint 侧的首装/更新/路径约定是否一致，避免两层各写一套判断"}

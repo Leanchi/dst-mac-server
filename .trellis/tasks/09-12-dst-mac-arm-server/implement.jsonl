@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/09-12-dst-mac-arm-server/research/upstream-code-verification.md", "reason": "上游源码级事实基线：steamcmd 两处真实调用点（update/linux_update.go 与 mod/mod_service.go）的精确行为、模组产物路径契约、Bin=2664 box64 启动分支、上游 Docker 两套方案对比与缺陷、release tarball 含 dist 的构建输入"}
+{"file": ".trellis/tasks/09-12-dst-mac-arm-server/research/depotdownloader-integration.md", "reason": "DepotDownloader 3.4.0 源码级集成契约：steamcmd→DD 命令映射表、-dir 直接落盘规则（决定模组下载传参方式）、steamclient.so 就位方案、amd64 运行库清单、本机 macos-arm64 先行验证法"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "fork 改造须最大化复用上游既有抽象（shellUtils 日志语义、已下载跳过逻辑、beta 目录语义），避免平行造轮子"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动横跨 Go 服务层与 Docker/entrypoint 层，需核对两侧对首装/更新/模组路径的约定一致（appmanifest 判断、-dir 落盘、模组路径契约）"}
