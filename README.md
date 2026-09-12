@@ -50,7 +50,7 @@ docker run -d --name dst-mac-server \
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `DST_DIR` | `/app/dst-dedicated-server` | 游戏安装目录（改动需同步调整挂载点） |
+| `DST_DIR` | `/app/dst-dedicated-server` | 游戏安装目录（容器内路径固定勿改；如需换位置只调整挂载的宿主机侧路径） |
 | `DST_FORCE_UPDATE` | 未设置 | 设为 `1` 时启动即执行一次增量更新 |
 | `SKIP_GAME_INSTALL` | 未设置 | 设为 `1` 跳过游戏安装，只启动面板（调试用） |
 

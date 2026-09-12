@@ -4,8 +4,8 @@
 #       日志可见下载进度，完成后面板与游戏自动就绪）
 #
 # 环境变量说明：
-#   DST_DIR            游戏安装目录（容器内路径，默认 /app/dst-dedicated-server；
-#                      若改动需同步修改 DST_DIR 与挂载点两处）
+#   DST_DIR            游戏安装目录，容器内路径固定为 /app/dst-dedicated-server 勿改
+#                      （面板容器模式会锁定该路径；只需调整 volumes 里的宿主机侧路径）
 #   DST_FORCE_UPDATE   设为 1 时启动强制走一次增量更新（-validate 校验差异），
 #                      默认仅在校测到 appmanifest_343050.acf 缺失时才安装
 #   SKIP_GAME_INSTALL  设为 1 时跳过游戏首装与 steamclient.so 就位，直接启动面板
