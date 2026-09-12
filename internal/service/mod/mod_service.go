@@ -9,6 +9,7 @@ import (
 	"dst-admin-go/internal/pkg/utils/shellUtils"
 	"dst-admin-go/internal/service/archive"
 	"dst-admin-go/internal/service/dstConfig"
+	"dst-admin-go/internal/service/steam"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +21,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -758,8 +758,8 @@ func (s *ModService) getModInfoConfig(clusterName, lang, modId string) map[strin
 	modDownloadPath := config.Mod_download_path
 	fileUtils.CreateDirIfNotExists(modDownloadPath)
 
-	// 下载的模组位置
-	modPath := filepath.Join(modDownloadPath, "steamapps", "workshop", "content", "322330", modId)
+	// 下载的模组位置（面板产物路径契约，绝对不能变）
+	modPath := workshopModPath(modDownloadPath, modId)
 	if _, err := os.Stat(modPath); err == nil {
 		log.Println("Mod already downloaded to:", modPath)
 	} else {
@@ -774,28 +774,14 @@ func (s *ModService) getModInfoConfig(clusterName, lang, modId string) map[strin
 				return make(map[string]interface{})
 			}
 		} else {
-			var cmd *exec.Cmd
-			if fileUtils.Exists(filepath.Join(steamcmd, "steamcmd")) {
-				cmd = exec.Command(filepath.Join(steamcmd, "steamcmd"), "+login anonymous", "+force_install_dir", modDownloadPath, "+workshop_download_item 322330 "+modId, "+quit")
-			} else {
-				cmd = exec.Command(filepath.Join(steamcmd, "steamcmd.sh"), "+login anonymous", "+force_install_dir", modDownloadPath, "+workshop_download_item 322330 "+modId, "+quit")
-			}
-
-			log.Println("正在下载模组 command:", cmd)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				log.Println("下载mod失败，请检查steamcmd路径是否配置正确", err)
+			// DepotDownloader 匿名下载创意工坊物品，产物直接落盘 modPath
+			log.Println("正在通过 DepotDownloader 下载模组 modId:", modId, "dir:", modPath)
+			if err := steam.DownloadPubfile(modId, modPath, steamcmd); err != nil {
+				log.Println("下载mod失败，请检查DepotDownloader路径是否配置正确", err)
 				return make(map[string]interface{})
 			}
-
-			// 解析 SteamCMD 输出
-			re := regexp.MustCompile(`Downloaded item \d+ to "([^"]+)"`)
-			match := re.FindStringSubmatch(string(output))
-			if len(match) < 2 {
-				log.Println("Error parsing output:", string(output))
-				return make(map[string]interface{})
-			}
-			log.Println("Mod downloaded to:", match[1])
+			// CDN zip 型模组 DepotDownloader 只落 zip 不解压，这里兜底解压
+			s.extractModZip(modPath)
 		}
 	}
 
@@ -806,6 +792,50 @@ func (s *ModService) getModInfoConfig(clusterName, lang, modId string) map[strin
 		return make(map[string]interface{})
 	}
 	return s.readModInfo(lang, modId, modinfoPath)
+}
+
+// workshopModPath 创意工坊模组在面板下载目录中的位置（产物路径契约，绝对不能变）
+func workshopModPath(modDownloadPath, modId string) string {
+	return filepath.Join(modDownloadPath, "steamapps", "workshop", "content", "322330", modId)
+}
+
+// extractModZip 解压兜底：实测 DST 创意工坊模组主流为 CDN zip 型，
+// DepotDownloader 对其只落盘 <dir>/<原文件名>.zip 不解压。
+// 当 modPath 下没有 modinfo.lua 且存在 zip 文件时，把 zip 内容解压到 modPath
+// （zip 根直接含 modinfo.lua），解压成功后删除 zip 文件。
+func (s *ModService) extractModZip(modPath string) {
+	if _, err := os.Stat(filepath.Join(modPath, "modinfo.lua")); err == nil {
+		return
+	}
+
+	entries, err := os.ReadDir(modPath)
+	if err != nil {
+		log.Println("读取模组目录失败:", modPath, err)
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".zip") {
+			continue
+		}
+		zipPath := filepath.Join(modPath, entry.Name())
+		zipReader, err := zip.OpenReader(zipPath)
+		if err != nil {
+			log.Println("打开模组zip失败:", zipPath, err)
+			continue
+		}
+		err = s.unzipToDir(&zipReader.Reader, modPath)
+		zipReader.Close()
+		if err != nil {
+			log.Println("模组zip解压失败:", zipPath, err)
+			continue
+		}
+		if err := os.Remove(zipPath); err != nil {
+			log.Println("删除模组zip失败:", zipPath, err)
+			continue
+		}
+		log.Println("模组zip已解压并删除原文件:", zipPath)
+	}
 }
 
 // getV1ModInfoConfig 从v1 mod中获取配置

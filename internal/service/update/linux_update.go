@@ -1,8 +1,8 @@
 package update
 
 import (
-	"dst-admin-go/internal/pkg/utils/shellUtils"
 	"dst-admin-go/internal/service/dstConfig"
+	"dst-admin-go/internal/service/steam"
 	"log"
 	"os"
 	"path/filepath"
@@ -23,19 +23,23 @@ func (u LinuxUpdate) Update(clusterName string) error {
 	if err != nil {
 		return err
 	}
-	updateCommand, err := LinuxUpdateCommand(config)
-	if err != nil {
-		return err
+
+	// 上游语义：beta 平行目录（<dir>-beta）， DepotDownloader 拉取 updatebeta 分支
+	dstInstallDir := config.Force_install_dir
+	if config.Beta == 1 {
+		dstInstallDir += "-beta"
 	}
-	log.Println("正在更新游戏", "cluster: ", clusterName, "command: ", updateCommand)
-	_, err = shellUtils.Shell(updateCommand)
+	beta := config.Beta == 1
+
+	log.Println("正在更新游戏", "cluster: ", clusterName, "dir: ", dstInstallDir, "beta: ", beta)
+	err = steam.DownloadApp(dstInstallDir, beta, config.Steamcmd)
 	if err == nil {
 		return nil
 	}
 
 	log.Println("更新游戏失败，清理 Steam 下载缓存后重试一次", "cluster: ", clusterName, "error: ", err)
 	cleanupSteamDownloadCache(config)
-	_, retryErr := shellUtils.Shell(updateCommand)
+	retryErr := steam.DownloadApp(dstInstallDir, beta, config.Steamcmd)
 	if retryErr != nil {
 		return retryErr
 	}
