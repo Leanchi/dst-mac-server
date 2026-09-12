@@ -94,7 +94,7 @@ RUN dpkg --add-architecture amd64 \
 # 构建完即清理编译工具链，避免撑大最终镜像
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git cmake build-essential python3 \
-    && git clone --depth 1 --branch v0.4.5 https://github.com/ptitSeb/box64.git /tmp/box64 \
+    && git clone --depth 1 --branch v0.4.5-1 https://github.com/ptitSeb/box64.git /tmp/box64 \
     && cmake -S /tmp/box64 -B /tmp/box64/build \
       -DARM_DYNAREC=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     && cmake --build /tmp/box64/build -j"$(nproc)" \
