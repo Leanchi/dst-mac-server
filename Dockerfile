@@ -4,9 +4,9 @@
 # =============================================================================
 # dst-mac-server —— Apple Silicon (linux/arm64) DST 面板镜像
 #
-# stage 1 builder: golang:1.24（构建机原生跑，交叉编译出 arm64 面板二进制；
-#                  并从上游 release 提取预构建前端 dist/）
-# stage 2 runtime: ubuntu:22.04 arm64
+# stage 1 frontend: node:20（构建上游配套 web UI，dist 与后端 main 同源）
+# stage 2 builder:  golang:1.24（构建机原生跑，交叉编译出 arm64 面板二进制）
+# stage 3 runtime:  ubuntu:22.04 arm64
 #   - dotnet-runtime-8.0（DepotDownloader 依赖）
 #   - amd64 运行库（构建期装齐，供 box64 运行 x86_64 的 DST 服务端）
 #   - box64（源码编译，ARM_DYNAREC=ON）
@@ -16,10 +16,27 @@
 # 构建：docker buildx build --platform linux/arm64 -t dst-mac-server:dev .
 # =============================================================================
 
+# --------------------------------------------------------------- frontend ----
+# 面板 web UI 源码在 companion 仓库（上游 CI 同款来源），现构建保证与后端 API 配套。
+# 网络受限时可用 --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+FROM node:20-alpine AS frontend
+
+ARG FRONTEND_REPO=carrot-hu23/dst-manage-web2
+ARG FRONTEND_REF=main
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
+WORKDIR /web
+RUN wget -qO /tmp/web.tar.gz \
+      "https://github.com/${FRONTEND_REPO}/archive/refs/heads/${FRONTEND_REF}.tar.gz" \
+    && tar -xzf /tmp/web.tar.gz -C /web --strip-components=1 \
+    && rm -f /tmp/web.tar.gz
+RUN npm config set registry "${NPM_REGISTRY}" \
+    && npm ci \
+    && npm run build
+# 产物：/web/dist
+
 # ---------------------------------------------------------------- builder ----
 FROM golang:1.24 AS builder
-
-ARG UPSTREAM_VERSION=1.6.1
 
 # 先拷 go.mod/go.sum 单独下载依赖，充分利用层缓存
 WORKDIR /src
@@ -29,15 +46,8 @@ RUN go mod download
 # 交叉编译纯 Go 二进制（glebarez/sqlite 无 cgo，交叉编译零障碍）
 COPY cmd/ cmd/
 COPY internal/ internal/
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /out/dst-admin-go cmd/server/main.go
-
-# 前端源码不在本仓库，从上游 release tarball 提取预构建 dist/
-RUN mkdir -p /out /tmp/upstream \
-    && wget -qO /tmp/upstream.tar.gz \
-      "https://github.com/carrot-hu23/dst-admin-go/releases/download/${UPSTREAM_VERSION}/dst-admin-go.${UPSTREAM_VERSION}.tar.gz" \
-    && tar -xzf /tmp/upstream.tar.gz -C /tmp/upstream \
-    && mv "$(find /tmp/upstream -type d -name dist | head -n 1)" /out/dist \
-    && rm -rf /tmp/upstream /tmp/upstream.tar.gz
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /out/dst-admin-go cmd/server/main.go \
+    && mkdir -p /out
 
 # ---------------------------------------------------------------- runtime ----
 FROM ubuntu:22.04
@@ -107,7 +117,7 @@ WORKDIR /app
 COPY --from=builder /out/dst-admin-go /app/dst-admin-go
 RUN chmod 755 /app/dst-admin-go
 
-COPY --from=builder /out/dist /app/dist
+COPY --from=frontend /web/dist /app/dist
 COPY static/ /app/static
 COPY config.yml /app/config.yml
 

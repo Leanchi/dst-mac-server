@@ -65,9 +65,10 @@ DepotDownloader 有 `DepotDownloader-macos-arm64.zip` → 开发机（Apple Sili
 - mod id 不能凭记忆：务必用 `ISteamRemoteStorage/GetPublishedFileDetails` 校验 `consumer_app_id==322330`（实测 381397865 是 CS2 物品，报 Unable to locate manifest ID）
 - 匿名下载 pubfile 无需登录，报错为空结果时先核对 appid 归属
 
-### 7.3 steamclient.so（重大简化，覆盖 §4）
-- **DST Linux 发行包自带 `steamclient.so`**：depot 1006（Steamworks SDK Redist）直接把 `steamclient.so` 下到**游戏目录根**（实测 /tmp/dst-test/steamclient.so），另有 linux64/libsteamwebrtc.so
-- → **镜像无需解包 steamcmd tarball**；entrypoint 在游戏安装后把 `<game_dir>/steamclient.so`（兜底找 linux64/）拷贝到 `~/.steam/sdk64/steamclient.so`
+### 7.3 steamclient.so（重大简化，覆盖 §4；7.3.1 为 Phase C 实测修正）
+- **DST Linux 发行包自带 `steamclient.so`**：depot 1006（Steamworks SDK Redist）随游戏一起下载，**无需解包 steamcmd tarball**
+- **7.3.1 修正（Phase C 冒烟实测，2026-09-13）**：游戏目录**根**的 `steamclient.so` 是 **ELF32**（给 bin/ 下 32 位服务端），bin64 的 x64 服务端需要 **`linux64/steamclient.so`（ELF64）**。entrypoint 按 `linux64/` 优先查找，并校验 ELF 头 class 字节=2（ELF64）后才拷入 `~/.steam/sdk64/steamclient.so`
+- 验证点：开服日志确认连上 Steam 网络（Phase F 真机验收）
 
 ### 7.4 网络注意（开发机环境）
 - 实测部分 Steam CDN chunk 报 BadGateway（DD 自动重试其他节点），75s 约 10MB——开发机网络受限环境现象；真机/容器内以实际表现为准，README 需写明首次下载需可访问 Steam CDN
