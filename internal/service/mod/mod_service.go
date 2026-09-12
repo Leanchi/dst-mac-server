@@ -533,7 +533,7 @@ func (s *ModService) UpdateAllModInfos(clusterName, lang string) error {
 			// 删除之前的数据
 			config, _ := s.dstConfig.GetDstConfig(clusterName)
 			modDownloadPath := config.Mod_download_path
-			modPath := filepath.Join(modDownloadPath, "/steamapps/workshop/content/322330/", modId)
+			modPath := workshopModPath(modDownloadPath, modId)
 			_ = fileUtils.DeleteDir(modPath)
 			_, _ = s.SubscribeModByModId(clusterName, modId, lang)
 		}(i)
@@ -583,7 +583,7 @@ func (s *ModService) SaveModInfo(modInfo *model.ModInfo) error {
 // AddModInfo 手动添加模组
 func (s *ModService) AddModInfo(clusterName, lang, modid, modinfo, modDownloadPath string) error {
 	// 创建workshop文件
-	workshopDirPath := filepath.Join(modDownloadPath, "/steamapps/workshop/content/322330", modid)
+	workshopDirPath := workshopModPath(modDownloadPath, modid)
 	fileUtils.CreateDirIfNotExists(workshopDirPath)
 
 	modinfoPath := filepath.Join(workshopDirPath, "modinfo.lua")

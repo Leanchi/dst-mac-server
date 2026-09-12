@@ -51,3 +51,24 @@ DST bin64 二进制为 x86_64 ELF，容器（arm64）内需安装 amd64 架构�
 ## 6. 本机可先行验证（开发红利）
 
 DepotDownloader 有 `DepotDownloader-macos-arm64.zip` → 开发机（Apple Silicon）上**无需 Docker 即可验证** DD 的下载命令、模组落盘路径、beta 分支行为，缩短实施反馈环。
+
+## 7. B0 实测结论（2026-09-13，macos-arm64 3.4.0 实跑）
+
+### 7.1 可执行形态
+- `DepotDownloader-macos-arm64.zip` 为**自包含单文件**（85MB），无需本机 .NET。Linux 版 zip 上游 Dockerfile 配 dotnet-runtime-8.0 → 按 framework-dependent 处理（镜像内装 runtime）
+- 匿名下载 343050（public 分支）实测通过：`-os linux -osarch 64` 生效（拿到 depot 343052 的 key）
+
+### 7.2 模组落盘（实测，覆盖 §3.2 假设）
+- DST 创意工坊模组**主流为 file_url（CDN zip）型**：实测 3 个知名 mod（362175979/365119238/661253977）全走 `DownloadWebFile`，DD 落盘 `<dir>/<原文件名>.zip` 且**不解压**（zip 内 modinfo.lua 在根部）
+- depot 型（file_url 空才走）直接落文件树
+- **Go 侧必须加兜底**：下载完成且 `<dir>/modinfo.lua` 不存在时，解压 `<dir>/*.zip` 到 `<dir>`（覆盖前先看清 zip 根是否直接含 modinfo.lua）
+- mod id 不能凭记忆：务必用 `ISteamRemoteStorage/GetPublishedFileDetails` 校验 `consumer_app_id==322330`（实测 381397865 是 CS2 物品，报 Unable to locate manifest ID）
+- 匿名下载 pubfile 无需登录，报错为空结果时先核对 appid 归属
+
+### 7.3 steamclient.so（重大简化，覆盖 §4）
+- **DST Linux 发行包自带 `steamclient.so`**：depot 1006（Steamworks SDK Redist）直接把 `steamclient.so` 下到**游戏目录根**（实测 /tmp/dst-test/steamclient.so），另有 linux64/libsteamwebrtc.so
+- → **镜像无需解包 steamcmd tarball**；entrypoint 在游戏安装后把 `<game_dir>/steamclient.so`（兜底找 linux64/）拷贝到 `~/.steam/sdk64/steamclient.so`
+
+### 7.4 网络注意（开发机环境）
+- 实测部分 Steam CDN chunk 报 BadGateway（DD 自动重试其他节点），75s 约 10MB——开发机网络受限环境现象；真机/容器内以实际表现为准，README 需写明首次下载需可访问 Steam CDN
+- 本机网络：api.steampowered.com 与 Steam CM 通；store.steampowered.com / steamcommunity.com 不通（不影响 DD）

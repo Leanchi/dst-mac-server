@@ -53,8 +53,9 @@ func DownloadPubfile(modID string, dir string) error
 
 - steamcmd exec + 输出正则解析 → `DownloadPubfile(modId, dir)`，
   `dir = <Mod_download_path>/steamapps/workshop/content/322330/<modId>`
-- 路径契约不变（R1 文档 §1.2）：下载成功后 `<dir>/modinfo.lua` 存在即视为成功；DD 已下载跳过逻辑由现有"目录已存在则跳过"承担。
-- `-pubfile` 有 `file_url` 的模组走 DD 内部 web 直下，同样落 `-dir`，行为统一。
+- 路径契约不变（R1 文档 §1.2）：下载成功后 `<dir>/modinfo.lua` 存在即视为成功；DD 已下载跳过逻辑由现有"目录已存在则跳过"承担
+- **解压兜底（B0 实测新增）**：DST 模组主流为 CDN zip 型，DD 落盘 `<dir>/<原名>.zip` 不解压 → 下载后若 `<dir>/modinfo.lua` 不存在且目录内有 zip，则解压到 `<dir>`（zip 根直接含 modinfo.lua，B0 实测）；解压后删除 zip
+- `-pubfile` 有 `file_url` 的模组走 DD 内部 web 直下，同样落 `-dir`，行为统一
 
 ### 2.4 不改动清单（明确）
 
@@ -78,7 +79,7 @@ func DownloadPubfile(modID string, dir string) error
 #   dpkg --add-architecture amd64 + amd64 运行库（§3.3 清单）
 #   box64: 源码编译 -DARM_DYNAREC=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
 #   DepotDownloader_3.4.0 linux-arm64.zip → /opt/DepotDownloader
-#   steamcmd_linux.tar.gz → 解包到 /opt/steamcmd（只为 steamclient.so，不执行任何 i386）
+#   （steamclient.so 无需预置：B0 实测 DST Linux 发行包自带，见 §3.2.3）
 #   COPY --from=builder: dst-admin-go / dist/ / static/ / config.yml / docker-entrypoint.sh / docker_dst_config
 #   ENTRYPOINT ./docker-entrypoint.sh   EXPOSE 8082/tcp 10888,10998,10999/udp
 ```
@@ -87,8 +88,8 @@ func DownloadPubfile(modID string, dir string) error
 
 1. `ulimit -Sn 10000`（上游同款，screen 卡顿规避）
 2. 播种 `/app/data`：`dst_config`（**默认 `Bin=2664`**、`Steamcmd=/opt/DepotDownloader`）、`password.txt`、backup/mod/`DoNotStarveTogether/Cluster_1` 目录（参考 amd64 entrypoint 逻辑）
-3. steamclient.so 就位：`mkdir -p ~/.steam/sdk64 && cp /opt/steamcmd/linux64/steamclient.so ~/.steam/sdk64/`
-4. **条件首装**：`<dst_dir>/steamapps/appmanifest_343050.acf` 不存在 → 跑 `DownloadApp` 等价命令（`-validate`）；存在 → 秒级跳过（修复上游半成品每次全量 validate 的问题）。环境变量 `DST_FORCE_UPDATE=1` 可强制更新
+3. steamclient.so 就位：游戏目录若已安装，把 `<game_dir>/steamclient.so`（兜底找 `linux64/`，B0 实测 depot 1006 会把 steamclient.so 下到游戏根目录）拷贝到 `~/.steam/sdk64/steamclient.so`；**无需解包 steamcmd tarball**（B0 实测简化）
+4. **条件首装**：`<dst_dir>/steamapps/appmanifest_343050.acf` 不存在 → 跑 `DownloadApp` 等价命令（`-validate`）；存在 → 秒级跳过（修复上游半成品每次全量 validate 的问题）。环境变量 `DST_FORCE_UPDATE=1` 可强制更新；首装完成后再次执行第 3 步
 5. `chmod +x` bin64 二进制 → `exec ./dst-admin-go`
 
 ### 3.3 amd64 运行库（构建期装齐，不放 entrypoint）
