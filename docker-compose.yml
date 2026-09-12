@@ -1,0 +1,29 @@
+# dst-mac-server（Apple Silicon / linux/arm64）Docker Compose 示例
+#
+# 使用：docker compose up -d   （首次启动会在容器内通过 DepotDownloader 下载 ~2GB 游戏本体，
+#       日志可见下载进度，完成后面板与游戏自动就绪）
+#
+# 环境变量说明：
+#   DST_DIR            游戏安装目录（容器内路径，默认 /app/dst-dedicated-server；
+#                      若改动需同步修改 DST_DIR 与挂载点两处）
+#   DST_FORCE_UPDATE   设为 1 时启动强制走一次增量更新（-validate 校验差异），
+#                      默认仅在校测到 appmanifest_343050.acf 缺失时才安装
+#   SKIP_GAME_INSTALL  设为 1 时跳过游戏首装与 steamclient.so 就位，直接启动面板
+#                      （CI 冒烟/调试用；正常使用请勿设置）
+services:
+  dst-mac-server:
+    image: dst-mac-server:dev
+    container_name: dst-mac-server
+    restart: unless-stopped
+    ports:
+      - "8082:8082" # 面板 Web UI
+      - "10888:10888/udp" # 饥荒世界（地上）通信端口
+      - "10998:10998/udp" # 洞穴世界通信端口
+      - "10999:10999/udp" # 森林世界通信端口（按集群配置）
+    volumes:
+      # 面板持久化数据：dst_config、password.txt、sqlite 数据库(dst-db)、
+      # 存档(DoNotStarveTogether/)、备份(backup/)、模组缓存(mod/)
+      - ./data:/app/data
+      # 游戏本体（~2GB）。挂载持久化后，镜像升级/容器重建不触发重复下载；
+      # 首次启动由 entrypoint 检测 appmanifest 缺失自动安装
+      - ./dst-server:/app/dst-dedicated-server

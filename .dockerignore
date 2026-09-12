@@ -1,0 +1,24 @@
+# 版本控制与工作区元数据
+.git
+.gitattributes
+.github
+.trellis
+.zcode
+.claude
+.gitignore
+
+# 本地产物目录（构建期由 builder 从上游 release 提取 dist，运行期由容器生成）
+dist
+dst
+data
+dst-server
+dst-db
+password.txt
+*.log
+
+# 与镜像构建无关的文档与脚本
+docs
+README*.md
+scripts/docker
+scripts/docker-build-mac
+scripts/py-dst-cli

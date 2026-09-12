@@ -3,6 +3,9 @@
 # dependencies
 /dist
 /dst
+# docker compose / 本地容器运行产生的持久卷目录（面板数据、游戏本体）
+/data
+/dst-server
 .idea
 
 first
