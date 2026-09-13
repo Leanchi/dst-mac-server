@@ -44,9 +44,10 @@ func NewRoute(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	app.GET("/hello", func(ctx *gin.Context) {
 		ctx.String(200, "Hello! Dont starve together")
 	})
-	// Swagger UI
-	app.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	RegisterStaticFile(app)
+	// Swagger UI（注册在 CacheControlMiddleware 之后，gin 中间件按注册时绑定，
+	// 否则 /swagger 不会经过缓存中间件，no-store 分级失效）
+	app.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	Register(cfg, db, app.Group(""))
 	return app
 }
@@ -68,9 +69,7 @@ func RegisterStaticFile(app *gin.Engine) {
 		if r := recover(); r != nil {
 		}
 	}()
-	app.Use(func(context *gin.Context) {
-		context.Writer.Header().Set("Cache-Control", "public, max-age=30672000")
-	})
+	app.Use(CacheControlMiddleware())
 	app.LoadHTMLGlob("dist/index.html") // 添加入口index.html
 	//r.LoadHTMLFiles("dist//*") // 添加资源路径
 	app.Static("/assets", "./dist/assets")

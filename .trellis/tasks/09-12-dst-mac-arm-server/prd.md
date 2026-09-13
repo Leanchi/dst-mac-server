@@ -69,3 +69,30 @@ Docker：面板(Web:8082) + 游戏端口 UDP 10888/10998/10999；存档/模组�
 - box64 性能：DST 在 box64/ARM_DYNAREC 下可玩（树莓派社区验证），Apple Silicon 上预期更好；启动慢属正常
 - 运行时架构选择：推荐 arm64 容器 + box64（自包含、任何 ARM64 主机可用）；备选 amd64 容器 + Docker Desktop Rosetta（Mac 专属、依赖用户开开关、QEMU 回退极慢）
 - 首次下载约 2GB：entrypoint 不应每次启动全量 -validate（上游半成品的问题），需按 appmanifest/目录判断跳过
+
+---
+
+## BUG-1 不同浏览器世界列表不一致（已确诊根因，2026-09-13）
+
+**现象**：不同浏览器登录面板后，左下角世界列表（panel.levelList 卡片）内容不一样（一个显示 森林+洞穴，另一个显示幽灵 Forest）。
+
+**根因**：`internal/api/router.go:71-73` 全局中间件给所有响应设置 `Cache-Control: public, max-age=30672000`（约 1 年），覆盖 index.html、静态资源和**全部 /api/* GET JSON**。浏览器按 URL 各自缓存了不同历史时期的 API 响应（如 /api/dst/config、/api/cluster/level），max-age 内不再发请求，导致每个浏览器渲染不同时代的数据。
+
+**证据链**（全部实测）：
+- 浏览器 fetch（默认缓存）/api/dst/config → Cluster_1；同一浏览器 fetch cache:"no-store" → MyDediServer（正确值）
+- 磁盘 data/dst_config = cluster=MyDediServer（04:26 起），hexdump 无格式问题；改为 ProbeTest 后普通 fetch 仍返回 Cluster_1（缓存命中未发请求）
+- no-store 下 /api/cluster/level 返回真实 [森林/Master, 洞穴/Caves]
+- curl -sI /api/dst/config → 响应头确含 max-age=30672000（连 404 都带）
+- 18:19 容器内 screen 会话 DST_8level_Master_MyDediServer（PID 542/543）= 持有旧缓存的浏览器发起的启动
+- 幽灵 Forest 来源：早期容器播种 cluster=Cluster_1 时代被浏览器 B 缓存；GetLevelList 对空 level.json 有自动创建 Forest 的副作用（internal/service/level/level.go:44-61）
+
+**修复要求（R6）**：缓存头按路径分级——/assets/* 等带 hash 静态资源保持长缓存（加 immutable）；index.html（/ 与 /index.html）改 no-cache（可 304 再验证）；/api/*、/ws、/swagger 改 no-store。不得改变任何 API 行为语义。
+
+**验收**：
+- A1 `curl -sI localhost:8082/api/dst/config` 返回 `Cache-Control: no-store`
+- A2 `curl -sI localhost:8082/` 返回 `Cache-Control: no-cache`
+- A3 静态资源仍长缓存
+- A4 新增 Go 测试覆盖三级缓存头并通过 `go test ./...`
+- A5 用户各浏览器硬刷新一次后，世界列表一致显示 森林+洞穴
+
+**已知残留（不在本次修复范围）**：已中毒的浏览器缓存需用户一次性硬刷新（Cmd/Ctrl+Shift+R）或清站点数据；长期可考虑 frontend axios 加 no-cache 请求头（前端在 companion 仓库，需另行决策）；遗留 Cluster_1 存档目录由用户决定是否删除。
