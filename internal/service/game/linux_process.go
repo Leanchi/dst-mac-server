@@ -81,6 +81,8 @@ func (p *LinuxProcess) launchLevel(clusterName, levelName string) error {
 	}
 	startCmd += "  ;"
 	log.Println("正在启动世界", "cluster: ", clusterName, "level: ", levelName, "command: ", startCmd)
+	// 清掉上一轮关闭残留的 Dead 会话（box64 下 screen 不会自动回收）
+	_, _ = shellUtils.Shell("screen -wipe >/dev/null 2>&1 ; true")
 	_, err = shellUtils.Shell(startCmd)
 	return err
 }
@@ -96,7 +98,24 @@ func (p *LinuxProcess) shutdownLevel(clusterName, levelName string) error {
 	shell := "screen -S \"" + p.SessionName(clusterName, levelName) + "\" -p 0 -X stuff \"c_shutdown(true)\\n\""
 	log.Println("正在shutdown世界", "cluster: ", clusterName, "level: ", levelName, "command: ", shell)
 	_, err = shellUtils.Shell(shell)
-	return err
+	if err != nil {
+		return err
+	}
+	// 优雅关闭期间游戏要序列化整个世界（box64 下可能耗时数分钟），进程退出后
+	// screen 会话会残留为 Dead 状态（box64 转译环境下 screen 未能回收子进程）。
+	// 后台轮询等待退出并清理会话，不阻塞关闭接口的响应。
+	go func() {
+		for i := 0; i < 100; i++ {
+			time.Sleep(3 * time.Second)
+			if running, _ := p.Status(clusterName, levelName); !running {
+				break
+			}
+		}
+		session := p.SessionName(clusterName, levelName)
+		_, _ = shellUtils.Shell("screen -S \"" + session + "\" -X quit >/dev/null 2>&1 ; screen -wipe >/dev/null 2>&1 ; true")
+		log.Println("世界关闭清理完成", "cluster: ", clusterName, "level: ", levelName)
+	}()
+	return nil
 }
 
 func (p *LinuxProcess) killLevel(clusterName, level string) error {
@@ -209,7 +228,7 @@ func (p *LinuxProcess) stopAll(clusterName string) error {
 }
 
 func (p *LinuxProcess) Status(clusterName, levelName string) (bool, error) {
-	cmd := " ps -ef | grep -v grep | grep -v tail |grep '" + clusterName + "'|grep " + levelName + " |sed -n '1P'|awk '{print $2}' "
+	cmd := " ps -ef | grep -v grep | grep -v tail | grep -v defunct |grep '" + clusterName + "'|grep " + levelName + " |sed -n '1P'|awk '{print $2}' "
 	result, err := shellUtils.Shell(cmd)
 	if err != nil {
 		return false, nil
