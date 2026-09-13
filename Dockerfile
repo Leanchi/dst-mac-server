@@ -32,7 +32,11 @@ RUN wget -qO /tmp/web.tar.gz \
     && rm -f /tmp/web.tar.gz
 RUN npm config set registry "${NPM_REGISTRY}" \
     && npm ci \
-    && npm run build
+    && npm run build \
+# 品牌化：界面产品名替换为本项目名。
+# 仅改显示文案；指向上游的 GitHub 链接、LICENSE、日志路径等保持原样（GPL 合规）。
+    && sed -i 's|document.title = "饥荒管理控制台"|document.title = "dst-mac-server · 饥荒管理控制台"|' /web/dist/index.html \
+    && sed -i 's|饥荒联机版管理面板|dst-mac-server 面板|g' /web/dist/assets/*.js
 # 产物：/web/dist
 
 # ---------------------------------------------------------------- builder ----
