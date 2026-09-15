@@ -676,9 +676,11 @@ func (s *ModService) GetUgcModInfo(clusterName, levelName string) ([]WorkshopIte
 // 干扰游戏对模组状态的判定。
 func (s *ModService) DeleteUgcModFile(clusterName, levelName, workshopId string) error {
 	base := s.pathResolver.GetUgcModPath(clusterName)
-	shards, err := os.ReadDir(base)
+	// 目录层级：ugc_mods/<cluster>/<shard>/content/...，shard 遍历基于集群目录
+	clusterDir := filepath.Join(base, clusterName)
+	shards, err := os.ReadDir(clusterDir)
 	if err != nil {
-		// 缓存根目录不存在视为无可删除
+		// 集群缓存目录不存在视为无可删除
 		return nil
 	}
 	for _, shardEntry := range shards {
