@@ -58,3 +58,11 @@ Steam:\t<workshopId>\r\nWegame:\t<0 或平台映射 id>\r\n
 3. "删了又出现" → C2：检查是否游戏运行中/之后启动过（写回），并确认 modoverrides 已无该模组
 4. "拷进去的模组不生效" → C4：WorkshopID.txt 存在？目录层级 content/322330/<id>？
 5. "删了列表还在" → C3：是否只清了一个 shard？ACF 两个 shard 都查
+
+## 附：世界"莫名停止"排查（2026-09-15 实测）
+
+世界运行 ~30 分钟后无声停止（日志止于 Sim paused，无错误）：**DST 官方防挂机行为**。
+`pause_when_empty = true` 时默认 `IdleTimeout 1800s`（无人 30 分钟自动关服）。
+- cluster.ini 写 `idle_timeout = false/0/大数字` **实测全部无效**（游戏版本 747465 恒打 1800s）
+- 唯一解法：`pause_when_empty = false`（挂机模式，无人不暂停不自动关，代价是持续占用 CPU）
+- 该开关即面板「世界配置 → 无人时暂停」，用户可自行切换
