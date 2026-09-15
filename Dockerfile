@@ -36,7 +36,10 @@ RUN npm config set registry "${NPM_REGISTRY}" \
 # 品牌化：界面产品名替换为本项目名。
 # 仅改显示文案；指向上游的 GitHub 链接、LICENSE、日志路径等保持原样（GPL 合规）。
     && sed -i 's|document.title = "饥荒管理控制台"|document.title = "dst-mac-server · 饥荒管理控制台"|' /web/dist/index.html \
-    && sed -i 's|饥荒联机版管理面板|dst-mac-server 面板|g' /web/dist/assets/*.js
+    && sed -i 's|饥荒联机版管理面板|dst-mac-server 面板|g' /web/dist/assets/*.js \
+# 启动确认窗口 12s→90s：box64 冷启动 + UGC 模组下载常超 12s，
+# 前端会误报"进程状态未确认"（实际启动仍在进行）
+    && sed -i 's|d=async(m,v,b=12)|d=async(m,v,b=90)|g' /web/dist/assets/*.js
 # 产物：/web/dist
 
 # ---------------------------------------------------------------- builder ----
