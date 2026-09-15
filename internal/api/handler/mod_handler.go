@@ -402,5 +402,8 @@ func (h *ModHandler) DeleteUgcModFile(ctx *gin.Context) {
 		return
 	}
 
-	response.OkWithMessage("删除成功", ctx)
+	// UGC 缓存会被游戏按世界配置在启动时重新下载并写回登记（ACF），
+	// 删除仅代表清除缓存，不代表从世界移除模组（那由世界配置的
+	// modoverrides.lua 决定）。文案必须传达这一语义，避免"删不掉"的误解。
+	response.OkWithMessage("已清除缓存（游戏启动时会按世界配置自动重新下载；从世界移除模组请在模组设置中禁用并保存）", ctx)
 }
