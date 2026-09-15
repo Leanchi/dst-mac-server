@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,45 @@ func TestExtractModZipKeepsZipWhenExtractionFails(t *testing.T) {
 
 	if _, err := os.Stat(zipPath); err != nil {
 		t.Fatalf("解压失败时不应删除 zip")
+	}
+}
+
+func TestRemoveWorkshopItemFromAcf(t *testing.T) {
+	sample := "\"AppWorkshop\"\n{\n\t\"appid\"\t\t\"322330\"\n\t\"WorkshopItemsInstalled\"\n\t{\n\t\t\"569043634\"\n\t\t{\n\t\t\t\"size\"\t\t\"108285\"\n\t\t\t\"manifest\"\t\t\"1298\"\n\t\t}\n\t\t\"661253977\"\n\t\t{\n\t\t\t\"size\"\t\t\"31426\"\n\t\t\t\"manifest\"\t\t\"1466\"\n\t\t}\n\t\t\"1185229307\"\n\t\t{\n\t\t\t\"size\"\t\t\"844712\"\n\t\t\t\"manifest\"\t\t\"4721\"\n\t\t}\n\t}\n\t\"WorkshopItemsPending\"\n\t{\n\t\t\"999999999\"\n\t\t{\n\t\t\t\"size\"\t\t\"1\"\n\t\t}\n\t}\n}\n"
+	dir := t.TempDir()
+	path := filepath.Join(dir, "appworkshop_322330.acf")
+	if err := os.WriteFile(path, []byte(sample), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeWorkshopItemFromAcf(path, "661253977"); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := os.ReadFile(path)
+	content := string(out)
+	if strings.Contains(content, "661253977") {
+		t.Errorf("目标条目未被移除:\n%s", content)
+	}
+	for _, keep := range []string{"569043634", "1185229307", "999999999", "WorkshopItemsInstalled", "WorkshopItemsPending"} {
+		if !strings.Contains(content, keep) {
+			t.Errorf("误删了应保留的内容: %s\n%s", keep, content)
+		}
+	}
+	// 大括号必须配平
+	if strings.Count(content, "{") != strings.Count(content, "}") {
+		t.Errorf("大括号不配平:\n%s", content)
+	}
+	// 再删一个（连续删除两次仍正确）
+	if err := removeWorkshopItemFromAcf(path, "1185229307"); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = os.ReadFile(path)
+	if strings.Contains(string(out), "1185229307") {
+		t.Errorf("第二次删除失败:\n%s", out)
+	}
+}
+
+func TestRemoveWorkshopItemFromAcfMissingFile(t *testing.T) {
+	if err := removeWorkshopItemFromAcf(filepath.Join(t.TempDir(), "nope.acf"), "661253977"); err != nil {
+		t.Errorf("文件不存在应静默返回, got %v", err)
 	}
 }

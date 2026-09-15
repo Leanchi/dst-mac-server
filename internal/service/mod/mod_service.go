@@ -669,12 +669,67 @@ func (s *ModService) GetUgcModInfo(clusterName, levelName string) ([]WorkshopIte
 }
 
 // DeleteUgcModFile 删除UGC模组文件
+// 同时清理 Steam ACF 登记文件中的对应条目：UGC 模组列表以 ACF 为数据源，
+// 只删文件不删登记会导致列表残留，且 ACF「已安装」与文件缺失不一致会干扰
+// 游戏对模组状态的判定。
 func (s *ModService) DeleteUgcModFile(clusterName, levelName, workshopId string) error {
 	modFilePath := s.pathResolver.GetUgcWorkshopModPath(clusterName, levelName, workshopId)
 	if fileUtils.Exists(modFilePath) {
-		return fileUtils.DeleteDir(modFilePath)
+		if err := fileUtils.DeleteDir(modFilePath); err != nil {
+			return err
+		}
 	}
-	return nil
+	acfPath := s.pathResolver.GetUgcAcfPath(clusterName, levelName)
+	return removeWorkshopItemFromAcf(acfPath, workshopId)
+}
+
+// removeWorkshopItemFromAcf 从 Steam ACF 登记文件中移除指定模组的条目。
+// 条目形如：
+//
+//	"<workshopId>"
+//	{
+//	    "size" ...
+//	}
+//
+// 按大括号配对整块移除，避免残留半块破坏 ACF 结构。文件不存在时静默返回。
+func removeWorkshopItemFromAcf(filePath, workshopId string) error {
+	if !fileUtils.Exists(filePath) {
+		return nil
+	}
+	lines, err := fileUtils.ReadLnFile(filePath)
+	if err != nil {
+		return err
+	}
+	entry := "\"" + workshopId + "\""
+	out := make([]string, 0, len(lines))
+	pendingEntry := false // 已命中条目行，等待判断下一非空行是否为块开始
+	skipBlock := false
+	depth := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if skipBlock {
+			depth += strings.Count(trimmed, "{") - strings.Count(trimmed, "}")
+			if depth <= 0 {
+				skipBlock = false
+			}
+			continue
+		}
+		if pendingEntry {
+			pendingEntry = false
+			if trimmed == "{" {
+				skipBlock = true
+				depth = 1
+			}
+			// 非 "{" 的单行条目同样删除（仅丢弃本行）
+			continue
+		}
+		if trimmed == entry {
+			pendingEntry = true
+			continue
+		}
+		out = append(out, line)
+	}
+	return fileUtils.WriterTXT(filePath, strings.Join(out, "\n"))
 }
 
 // ===== 私有方法 =====
