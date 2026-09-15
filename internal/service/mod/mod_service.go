@@ -669,18 +669,34 @@ func (s *ModService) GetUgcModInfo(clusterName, levelName string) ([]WorkshopIte
 }
 
 // DeleteUgcModFile 删除UGC模组文件
+// UGC 缓存按集群共享但地上/地下各自持有文件与 ACF 登记副本，删除必须
+// 覆盖全部世界：只删单个世界会导致另一世界的列表残留已删条目。
 // 同时清理 Steam ACF 登记文件中的对应条目：UGC 模组列表以 ACF 为数据源，
-// 只删文件不删登记会导致列表残留，且 ACF「已安装」与文件缺失不一致会干扰
-// 游戏对模组状态的判定。
+// 只删文件不删登记会导致列表残留，且 ACF「已安装」与文件缺失不一致会
+// 干扰游戏对模组状态的判定。
 func (s *ModService) DeleteUgcModFile(clusterName, levelName, workshopId string) error {
-	modFilePath := s.pathResolver.GetUgcWorkshopModPath(clusterName, levelName, workshopId)
-	if fileUtils.Exists(modFilePath) {
-		if err := fileUtils.DeleteDir(modFilePath); err != nil {
+	base := s.pathResolver.GetUgcModPath(clusterName)
+	shards, err := os.ReadDir(base)
+	if err != nil {
+		// 缓存根目录不存在视为无可删除
+		return nil
+	}
+	for _, shardEntry := range shards {
+		if !shardEntry.IsDir() {
+			continue
+		}
+		shard := shardEntry.Name()
+		modFilePath := s.pathResolver.GetUgcWorkshopModPath(clusterName, shard, workshopId)
+		if fileUtils.Exists(modFilePath) {
+			if err := fileUtils.DeleteDir(modFilePath); err != nil {
+				return err
+			}
+		}
+		if err := removeWorkshopItemFromAcf(s.pathResolver.GetUgcAcfPath(clusterName, shard), workshopId); err != nil {
 			return err
 		}
 	}
-	acfPath := s.pathResolver.GetUgcAcfPath(clusterName, levelName)
-	return removeWorkshopItemFromAcf(acfPath, workshopId)
+	return nil
 }
 
 // removeWorkshopItemFromAcf 从 Steam ACF 登记文件中移除指定模组的条目。
