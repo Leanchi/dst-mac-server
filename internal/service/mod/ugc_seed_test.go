@@ -68,6 +68,27 @@ func TestEnsureAcfEntry(t *testing.T) {
 		}
 		assertAcfValid(t, acf, "11")
 	})
+
+	t.Run("details-only 时必须补 installed 段", func(t *testing.T) {
+		// 复刻实测病灶：CDN zip 型老模组只有 details 登记，游戏视为未安装
+		acf := filepath.Join(t.TempDir(), "appworkshop_322330.acf")
+		existing := "\"AppWorkshop\"\n{\n\t\"appid\"\t\t\"322330\"\n" +
+			"\t\"WorkshopItemsInstalled\"\n\t{\n\t\t\"999\"\n\t\t{\n\t\t}\n\t}\n" +
+			"\t\"WorkshopItemDetails\"\n\t{\n\t\t\"661\"\n\t\t{\n\t\t\t\"manifest\"\t\t\"-1\"\n\t\t}\n\t}\n}\n"
+		if err := os.WriteFile(acf, []byte(existing), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := ensureAcfEntry(acf, "661"); err != nil {
+			t.Fatal(err)
+		}
+		// installed 段必须新增 661，details 段保留原有条目
+		assertAcfValid(t, acf, "661")
+		// 999 原本就只在 installed 段，不应被动到
+		content, _ := os.ReadFile(acf)
+		if !strings.Contains(extractSection(t, string(content), "WorkshopItemsInstalled"), "\"999\"") {
+			t.Fatal("原有 installed 段条目不应被破坏")
+		}
+	})
 }
 
 // assertAcfValid 校验：ID 在两段 section 中各出现、全文花括号平衡

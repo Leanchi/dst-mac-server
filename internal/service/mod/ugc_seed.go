@@ -93,19 +93,12 @@ func (s *ModService) SeedUgcCache(clusterName, levelName string) {
 	}
 }
 
-// ensureAcfEntry 确保 appworkshop_322330.acf 中存在该模组的两段登记，
-// 已登记则跳过；文件不存在时创建含两段骨架的最小 ACF。
-// manifest 未知记 -1：游戏如据此判定需更新会自行重下，此时目录已在位，
-// 更新失败也不影响本次加载。
+// ensureAcfEntry 确保 appworkshop_322330.acf 中该模组两段登记齐全，逐段独立补写：
+// 只有 WorkshopItemDetails 而缺 WorkshopItemsInstalled 时游戏视为未安装，
+// 仍会联网重下且不加载（实测 661253977/1898181913 details-only 即此症状）。
+// 文件不存在时创建含两段骨架的最小 ACF。manifest 未知记 -1：游戏如据此判定
+// 需更新会自行重下，此时目录已在位，更新失败也不影响本次加载。
 func ensureAcfEntry(acfPath, workshopId string) error {
-	existing := ""
-	if content, err := os.ReadFile(acfPath); err == nil {
-		existing = string(content)
-		if strings.Contains(existing, `"`+workshopId+`"`) {
-			return nil
-		}
-	}
-
 	now := strconv.FormatInt(time.Now().Unix(), 10)
 	size := strconv.FormatInt(dirSize(filepath.Dir(acfPath), workshopId), 10)
 	installedEntry := acfEntryBlock(workshopId, [][2]string{
@@ -121,7 +114,8 @@ func ensureAcfEntry(acfPath, workshopId string) error {
 		{"latest_manifest", "-1"},
 	})
 
-	if existing == "" {
+	content, err := os.ReadFile(acfPath)
+	if err != nil {
 		skeleton := "\"AppWorkshop\"\n{\n\t\"appid\"\t\t\"322330\"\n" +
 			"\t\"WorkshopItemsInstalled\"\n\t{\n" + installedEntry + "\t}\n" +
 			"\t\"WorkshopItemDetails\"\n\t{\n" + detailsEntry + "\t}\n}\n"
@@ -129,12 +123,46 @@ func ensureAcfEntry(acfPath, workshopId string) error {
 		return os.WriteFile(acfPath, []byte(skeleton), 0644)
 	}
 
-	updated := insertAcfSectionEntry(existing, "WorkshopItemsInstalled", installedEntry)
-	updated = insertAcfSectionEntry(updated, "WorkshopItemDetails", detailsEntry)
+	existing := string(content)
+	updated := existing
+	if !acfSectionContains(updated, "WorkshopItemsInstalled", workshopId) {
+		updated = insertAcfSectionEntry(updated, "WorkshopItemsInstalled", installedEntry)
+	}
+	if !acfSectionContains(updated, "WorkshopItemDetails", workshopId) {
+		updated = insertAcfSectionEntry(updated, "WorkshopItemDetails", detailsEntry)
+	}
 	if updated == existing {
 		return nil
 	}
 	return os.WriteFile(acfPath, []byte(updated), 0644)
+}
+
+// acfSectionContains 判断 ID 是否登记在指定 section 内。
+// 注意不能做全文件包含判断：details 段存在不代表已安装。
+func acfSectionContains(content, section, workshopId string) bool {
+	marker := "\"" + section + "\"\n\t{"
+	idx := strings.Index(content, marker)
+	if idx < 0 {
+		return false
+	}
+	return strings.Contains(braceBody(content, idx+len(marker)-1), "\""+workshopId+"\"")
+}
+
+// braceBody 从开括号位置起做花括号配对，返回整段内容（含首尾括号）
+func braceBody(content string, open int) string {
+	depth := 0
+	for i := open; i < len(content); i++ {
+		switch content[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return content[open : i+1]
+			}
+		}
+	}
+	return content[open:]
 }
 
 // acfEntryBlock 生成与游戏写入风格一致的 tab 缩进登记块

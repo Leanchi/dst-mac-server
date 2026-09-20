@@ -32,9 +32,12 @@
 （2026-09-20 勘误：实测 4 个启动即被 "already have" 识别的模组目录均无 WorkshopID.txt，
 但有完整 ACF 登记——识别依据是 `appworkshop_322330.acf` 的 `WorkshopItemsInstalled` 段。）
 DST 新版模组缓存路径为 `content/322330/<id>`（含 modinfo.lua 在目录根）。
-从备份库播种/拷贝模组到 ugc_mods 时：目录 + ACF 两段登记（`WorkshopItemsInstalled` 与
-`WorkshopItemDetails`）缺一不可，WorkshopID.txt 可写可不写。manifest 未知时登记 `-1`，
-游戏如据此判定需更新会自行重下，更新失败不影响本次加载。
+从备份库播种/拷贝模组到 ugc_mods 时：目录 + **`WorkshopItemsInstalled` 段登记**缺一不可
+（该段才是 already have 判定依据），`WorkshopItemDetails` 段为元数据补充，**details-only
+不算已安装**（实测 661253977/1898181913 两个 CDN zip 型老模组 details-only，游戏每次启动
+联网重下且不加载）。WorkshopID.txt 可写可不写。manifest 未知时登记 `-1`，游戏如据此判定
+需更新会自行重下，更新失败不影响本次加载。播种的登记检查必须**逐 section 独立判断**，
+全文件包含判断会把 details-only 误判为已登记。
 
 ### C5. 模组产物路径契约（面板 DB ↔ 缓存）
 面板启用模组时从缓存读 `modinfo.lua`，缓存路径
@@ -62,7 +65,7 @@ box64/steamclient 下游戏启动时的创意工坊自下载慢且不稳（`ODPF
 - 清单来源 = 该世界 modoverrides.lua 的启用集合（C1）
 - 逐世界（shard）独立播种（C3）：目标 `<ugc>/<cluster>/<shard>/content/322330/<id>`
 - 目录缺 `modinfo.lua` → 从备份库拷贝（备份库为 zip 形态时先走 `extractModZip` 解压兜底）
-- 目录在位后确保 ACF 两段登记存在（已登记则跳过不改写）
+- 目录在位后确保 ACF 两段登记齐全（**逐段独立判断**：details-only 必须补 installed 段）
 - 备份库也缺 → 跳过留给游戏自下载；任何失败只记日志，**不阻塞启动**
 
 ---
