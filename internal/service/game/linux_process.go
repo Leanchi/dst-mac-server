@@ -135,27 +135,43 @@ func (p *LinuxProcess) Stop(clusterName, levelName string) error {
 	return p.stop(clusterName, levelName)
 }
 
+const (
+	// gracefulStopTimeout 发出 c_shutdown(true) 后等待进程自然退出的最长时间。
+	// 优雅关闭需要序列化整个世界存档，box64 转译环境下耗时可能达数分钟；
+	// 提前强杀会截断存档，且 Klei 大厅收不到注销消息导致条目长期残留。
+	gracefulStopTimeout = 3 * time.Minute
+	// stopPollInterval 优雅关闭期间轮询进程状态的间隔
+	stopPollInterval = 3 * time.Second
+)
+
+// waitForProcessExit 以固定间隔轮询进程状态，直到退出或超时。
+// 返回 true 表示进程在超时前退出；status 报错按"仍在运行"处理，等超时后由调用方降级强杀。
+func waitForProcessExit(status func() (bool, error), timeout, interval time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		running, err := status()
+		if err == nil && !running {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(interval)
+	}
+}
+
 // stop 内部实现，不加锁，供 Start 等方法内部调用
 func (p *LinuxProcess) stop(clusterName, levelName string) error {
 	p.shutdownLevel(clusterName, levelName)
-	time.Sleep(3 * time.Second)
-
-	if ok, err := p.Status(clusterName, levelName); err == nil && ok {
-		var i uint8 = 1
-		for {
-			if ok, err := p.Status(clusterName, levelName); err == nil && ok {
-				break
-			}
-			p.shutdownLevel(clusterName, levelName)
-			log.Println("正在第", i, "次stop世界", "cluster: ", clusterName, "level: ", levelName)
-			time.Sleep(1 * time.Second)
-			i++
-			if i > 3 {
-				break
-			}
-		}
+	// 优雅窗口内等待世界完成存档序列化并自然退出（含 Klei 大厅注销），
+	// 仅当超时未退出才降级为 kill -9 强制结束
+	if waitForProcessExit(func() (bool, error) {
+		return p.Status(clusterName, levelName)
+	}, gracefulStopTimeout, stopPollInterval) {
+		log.Println("世界已优雅退出", "cluster: ", clusterName, "level: ", levelName)
+		return nil
 	}
-	log.Println("使用kill命令强制结束世界", "cluster: ", clusterName, "level: ", levelName)
+	log.Println("优雅关闭超时，使用kill命令强制结束世界", "cluster: ", clusterName, "level: ", levelName)
 	return p.killLevel(clusterName, levelName)
 }
 

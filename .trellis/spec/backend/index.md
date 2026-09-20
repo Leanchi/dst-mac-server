@@ -21,6 +21,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [DST Mod Management](./dst-mod-management.md) | 模组三层管线契约：modoverrides/setup.lua/ugc_mods+ACF，删除语义与排查清单 | **Filled** |
 | [HTTP Cache-Control](./http-cache-control.md) | 响应缓存头分级契约（BUG-1 教训：动态响应永不长缓存） | Active |
+| [Game Process Lifecycle](./game-process-lifecycle.md) | 停服优雅窗口契约（BUG-2 教训：c_shutdown 存档未完成前禁止 kill -9） | Active |
 
 ---
 

@@ -12,7 +12,7 @@
   "assignee": "刘凌志",
   "createdAt": "2026-09-12",
   "completedAt": null,
-  "branch": null,
+  "branch": "main",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
