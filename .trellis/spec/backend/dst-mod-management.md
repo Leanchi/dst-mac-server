@@ -28,12 +28,13 @@
 ### C3. 每个世界（shard）各持一份缓存与登记
 `ugc_mods/<cluster>/Master/` 与 `ugc_mods/<cluster>/Caves/` 各有独立的模组目录和 `appworkshop_322330.acf`。**删除/清理必须遍历全部 shard**（目录层级：`ugc_mods/<cluster>/<shard>/...`，注意 cluster 与 shard 是两层，遍历少一层会静默落空且接口仍返回成功——已在此处踩坑两次）。
 
-### C4. 目录身份文件 WorkshopID.txt
-游戏识别 ugc_mods 下的模组目录要求存在 `WorkshopID.txt`，格式：
-```
-Steam:\t<workshopId>\r\nWegame:\t<0 或平台映射 id>\r\n
-```
-从面板备份库拷贝模组到 ugc_mods 时**必须补写该文件**，否则游戏不认目录并触发联网下载（失败即 ODPF）。DST 新版模组缓存路径为 `content/322330/<id>`（含 modinfo.lua 在目录根）。
+### C4. 游戏识别模组目录的依据是 ACF 登记而非 WorkshopID.txt
+（2026-09-20 勘误：实测 4 个启动即被 "already have" 识别的模组目录均无 WorkshopID.txt，
+但有完整 ACF 登记——识别依据是 `appworkshop_322330.acf` 的 `WorkshopItemsInstalled` 段。）
+DST 新版模组缓存路径为 `content/322330/<id>`（含 modinfo.lua 在目录根）。
+从备份库播种/拷贝模组到 ugc_mods 时：目录 + ACF 两段登记（`WorkshopItemsInstalled` 与
+`WorkshopItemDetails`）缺一不可，WorkshopID.txt 可写可不写。manifest 未知时登记 `-1`，
+游戏如据此判定需更新会自行重下，更新失败不影响本次加载。
 
 ### C5. 模组产物路径契约（面板 DB ↔ 缓存）
 面板启用模组时从缓存读 `modinfo.lua`，缓存路径
@@ -51,10 +52,26 @@ Steam:\t<workshopId>\r\nWegame:\t<0 或平台映射 id>\r\n
 
 ---
 
+## 启动前播种（SeedUgcCache 契约）
+
+box64/steamclient 下游戏启动时的创意工坊自下载慢且不稳（`ODPF failed entirely` /
+`DownloadServerMods timed out`），缺装模组时游戏带着残缺模组集开服，迟到下载下次重启才生效。
+面板在每次启动世界前执行 `ModService.SeedUgcCache`（`internal/service/mod/ugc_seed.go`，
+由 `GameHandler.Start/StartAll` 调用）：
+
+- 清单来源 = 该世界 modoverrides.lua 的启用集合（C1）
+- 逐世界（shard）独立播种（C3）：目标 `<ugc>/<cluster>/<shard>/content/322330/<id>`
+- 目录缺 `modinfo.lua` → 从备份库拷贝（备份库为 zip 形态时先走 `extractModZip` 解压兜底）
+- 目录在位后确保 ACF 两段登记存在（已登记则跳过不改写）
+- 备份库也缺 → 跳过留给游戏自下载；任何失败只记日志，**不阻塞启动**
+
+---
+
 ## 排查清单（模组问题先走这张表）
 
 1. 世界实际加载了什么 → grep modoverrides.lua（不是 setup.lua）
 2. 启动 ODPF 报错 → 对比 setup.lua 与 modoverrides 差集，重写 setup.lua 为启用集合
+2.5. "只加载了部分模组" → 查 ugc 缓存缺目录或缺 ACF 登记（面板已内置启动前播种，冷备场景确认备份库有该模组）
 3. "删了又出现" → C2：检查是否游戏运行中/之后启动过（写回），并确认 modoverrides 已无该模组
 4. "拷进去的模组不生效" → C4：WorkshopID.txt 存在？目录层级 content/322330/<id>？
 5. "删了列表还在" → C3：是否只清了一个 shard？ACF 两个 shard 都查

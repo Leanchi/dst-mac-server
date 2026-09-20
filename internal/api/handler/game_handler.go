@@ -11,6 +11,7 @@ import (
 	"dst-admin-go/internal/service/gameArchive"
 	"dst-admin-go/internal/service/level"
 	"dst-admin-go/internal/service/levelConfig"
+	"dst-admin-go/internal/service/mod"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -28,15 +29,17 @@ type GameHandler struct {
 	gameArchive      *gameArchive.GameArchive
 	levelConfigUtils *levelConfig.LevelConfigUtils
 	archive          *archive.PathResolver
+	modService       *mod.ModService
 }
 
-func NewGameHandler(process game.Process, levelService *level.LevelService, gameArchive *gameArchive.GameArchive, levelConfigUtils *levelConfig.LevelConfigUtils, archive *archive.PathResolver) *GameHandler {
+func NewGameHandler(process game.Process, levelService *level.LevelService, gameArchive *gameArchive.GameArchive, levelConfigUtils *levelConfig.LevelConfigUtils, archive *archive.PathResolver, modService *mod.ModService) *GameHandler {
 	return &GameHandler{
 		process:          process,
 		level:            levelService,
 		gameArchive:      gameArchive,
 		levelConfigUtils: levelConfigUtils,
 		archive:          archive,
+		modService:       modService,
 	}
 }
 
@@ -92,6 +95,9 @@ func (p *GameHandler) Start(ctx *gin.Context) {
 		ctx.JSON(400, response.Response{Code: 400, Msg: "levelName query parameter is required"})
 		return
 	}
+	// 启动前从备份库播种 UGC 缓存：游戏自下载在 box64 下慢且不稳，
+	// 缺装模组会让世界带着残缺模组集开服（失败只记日志，不阻塞启动）
+	p.modService.SeedUgcCache(clusterName, levelName)
 	err := p.process.Start(clusterName, levelName)
 	if err != nil {
 		ctx.JSON(http.StatusOK, response.Response{Code: 500, Msg: "failed to start game server: " + err.Error()})
@@ -110,6 +116,11 @@ func (p *GameHandler) Start(ctx *gin.Context) {
 // @Router /api/game/start/all [get]
 func (p *GameHandler) StartAll(ctx *gin.Context) {
 	clusterName := context.GetClusterName(ctx)
+	if config, err := p.levelConfigUtils.GetLevelConfig(clusterName); err == nil {
+		for i := range config.LevelList {
+			p.modService.SeedUgcCache(clusterName, config.LevelList[i].File)
+		}
+	}
 	err := p.process.StartAll(clusterName)
 	if err != nil {
 		ctx.JSON(http.StatusOK, response.Response{Code: 500, Msg: "failed to start all game servers: " + err.Error()})
