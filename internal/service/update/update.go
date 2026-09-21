@@ -9,7 +9,8 @@ import (
 )
 
 type Update interface {
-	Update(clusterName string) error
+	// isDelete 为 true 时先清空游戏目录再全量重装（保留 ugc_mods/mods/steamclient.so）
+	Update(clusterName string, isDelete bool) error
 }
 
 func EscapePath(path string) string {

@@ -41,7 +41,7 @@ type UpdateStrategy struct {
 func (s *UpdateStrategy) Execute(clusterName, uuid string) {
 	log.Printf("执行更新任务: cluster=%s, uuid=%s", clusterName, uuid)
 	if s.context != nil && s.context.UpdateService != nil {
-		s.context.UpdateService.Update(clusterName)
+		s.context.UpdateService.Update(clusterName, false)
 	}
 }
 

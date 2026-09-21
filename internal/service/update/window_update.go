@@ -16,7 +16,7 @@ func NewWindowUpdate(dstConfig dstConfig.Config) *WindowUpdate {
 	}
 }
 
-func (u WindowUpdate) Update(clusterName string) error {
+func (u WindowUpdate) Update(clusterName string, isDelete bool) error {
 	config, err := u.dstConfig.GetDstConfig(clusterName)
 	if err != nil {
 		return err

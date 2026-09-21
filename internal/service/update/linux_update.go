@@ -18,7 +18,7 @@ func NewLinuxUpdate(dstConfig dstConfig.Config) *LinuxUpdate {
 	}
 }
 
-func (u LinuxUpdate) Update(clusterName string) error {
+func (u LinuxUpdate) Update(clusterName string, isDelete bool) error {
 	config, err := u.dstConfig.GetDstConfig(clusterName)
 	if err != nil {
 		return err
@@ -31,7 +31,13 @@ func (u LinuxUpdate) Update(clusterName string) error {
 	}
 	beta := config.Beta == 1
 
-	log.Println("正在更新游戏", "cluster: ", clusterName, "dir: ", dstInstallDir, "beta: ", beta)
+	if isDelete {
+		if err := cleanGameDir(dstInstallDir); err != nil {
+			return err
+		}
+	}
+
+	log.Println("正在更新游戏", "cluster: ", clusterName, "dir: ", dstInstallDir, "beta: ", beta, "isDelete: ", isDelete)
 	err = steam.DownloadApp(dstInstallDir, beta, config.Steamcmd)
 	if err == nil {
 		return nil
@@ -43,6 +49,37 @@ func (u LinuxUpdate) Update(clusterName string) error {
 	if retryErr != nil {
 		return retryErr
 	}
+	return nil
+}
+
+// cleanGameDir 清空游戏目录后全量重装（前端「删除并更新」语义）。
+// 只删游戏本体文件，保留三类非游戏资产：
+//   - ugc_mods/：游戏的创意工坊模组缓存（重建要靠不稳的联网下载）
+//   - mods/：dedicated_server_mods_setup.lua 等面板管理的清单
+//   - steamclient.so：容器 entrypoint 播种的 Steam 组件
+func cleanGameDir(dir string) error {
+	preserve := map[string]bool{
+		"ugc_mods":      true,
+		"mods":          true,
+		"steamclient.so": true,
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, e := range entries {
+		if preserve[e.Name()] {
+			log.Println("删除并更新：保留", filepath.Join(dir, e.Name()))
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+			return err
+		}
+	}
+	log.Println("删除并更新：游戏目录已清空（保留 ugc_mods/mods/steamclient.so）", dir)
 	return nil
 }
 

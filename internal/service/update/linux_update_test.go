@@ -83,7 +83,7 @@ func TestLinuxUpdateBetaSemantics(t *testing.T) {
 		Force_install_dir: dstDir,
 		Beta:              1,
 	}})
-	if err := u.Update("cluster-1"); err != nil {
+	if err := u.Update("cluster-1", false); err != nil {
 		t.Fatalf("Update 失败: %v", err)
 	}
 
@@ -105,7 +105,7 @@ func TestLinuxUpdateNonBetaSemantics(t *testing.T) {
 		Force_install_dir: dstDir,
 		Beta:              0,
 	}})
-	if err := u.Update("cluster-1"); err != nil {
+	if err := u.Update("cluster-1", false); err != nil {
 		t.Fatalf("Update 失败: %v", err)
 	}
 
@@ -142,7 +142,7 @@ func TestLinuxUpdateRetriesOnceAndCleansCache(t *testing.T) {
 		Force_install_dir: strings.TrimSuffix(dstDir, "-beta"),
 		Beta:              1,
 	}})
-	if err := u.Update("cluster-1"); err != nil {
+	if err := u.Update("cluster-1", false); err != nil {
 		t.Fatalf("重试后应成功, got: %v", err)
 	}
 	calls := recordedCalls(t, record)
@@ -163,10 +163,50 @@ func TestLinuxUpdateReturnsErrorWhenBothAttemptsFail(t *testing.T) {
 		Force_install_dir: t.TempDir(),
 		Beta:              0,
 	}})
-	if err := u.Update("cluster-1"); err == nil {
+	if err := u.Update("cluster-1", false); err == nil {
 		t.Fatal("两次都失败时应返回错误")
 	}
 	if calls := recordedCalls(t, record); len(calls) != 2 {
 		t.Fatalf("期望共调用 2 次, got %d", len(calls))
+	}
+}
+
+func TestCleanGameDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("文件语义测试，Windows 跳过")
+	}
+	dir := t.TempDir()
+
+	// 游戏本体文件 + 应保留资产
+	gameFiles := []string{"version.txt", "dontstarve.xpm", "bin64/dontstarve_dedicated_server_nullrenderer_x64", "data/databundles/scripts.zip", "steamapps/appmanifest_343050.acf"}
+	preserved := []string{"ugc_mods/MyDediServer/Master/appworkshop_322330.acf", "mods/dedicated_server_mods_setup.lua", "steamclient.so"}
+	for _, p := range append(append([]string{}, gameFiles...), preserved...) {
+		full := filepath.Join(dir, p)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := cleanGameDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range preserved {
+		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
+			t.Fatalf("保留资产被误删: %s", p)
+		}
+	}
+	for _, p := range gameFiles {
+		if _, err := os.Stat(filepath.Join(dir, p)); !os.IsNotExist(err) {
+			t.Fatalf("游戏本体未被删除: %s", p)
+		}
+	}
+
+	// 不存在的目录不应报错（首装前场景）
+	if err := cleanGameDir(filepath.Join(dir, "not-exist")); err != nil {
+		t.Fatalf("目录不存在时应静默返回: %v", err)
 	}
 }

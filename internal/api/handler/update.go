@@ -29,12 +29,15 @@ func (h *UpdateHandler) RegisterRoute(router *gin.RouterGroup) {
 // @Description 更新游戏
 // @Tags update
 // @Success 200 {object} response.Response
+// @Param isDelete query bool false "true 时清空游戏目录后全量重装（保留模组缓存）"
 // @Router /api/game/update [get]
 func (h *UpdateHandler) Update(ctx *gin.Context) {
 
 	clusterName := context.GetClusterName(ctx)
+	// 前端「删除并更新」传 isDelete=true：清空游戏目录后全量重装
+	isDelete := ctx.Query("isDelete") == "true"
 
-	err := h.updateService.Update(clusterName)
+	err := h.updateService.Update(clusterName, isDelete)
 	if err != nil {
 		log.Panicln("更新游戏失败: ", err)
 	}
