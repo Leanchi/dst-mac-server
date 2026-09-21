@@ -40,7 +40,7 @@ func (u LinuxUpdate) Update(clusterName string, isDelete bool) error {
 	log.Println("正在更新游戏", "cluster: ", clusterName, "dir: ", dstInstallDir, "beta: ", beta, "isDelete: ", isDelete)
 	err = steam.DownloadApp(dstInstallDir, beta, config.Steamcmd)
 	if err == nil {
-		return nil
+		return ensureExecutable(dstInstallDir)
 	}
 
 	log.Println("更新游戏失败，清理 Steam 下载缓存后重试一次", "cluster: ", clusterName, "error: ", err)
@@ -48,6 +48,32 @@ func (u LinuxUpdate) Update(clusterName string, isDelete bool) error {
 	retryErr := steam.DownloadApp(dstInstallDir, beta, config.Steamcmd)
 	if retryErr != nil {
 		return retryErr
+	}
+	return ensureExecutable(dstInstallDir)
+}
+
+// ensureExecutable 补齐服务器二进制的可执行位。
+// DepotDownloader 下载不保留 exec bit（实测「删除并更新」全量重装后二进制变
+// 0644，box64 报 "is not an executable file" 直接拒启）；entrypoint 首装有
+// 同样的 chmod 兜底，此处覆盖面板更新路径（增量/全量均幂等）。
+func ensureExecutable(dstInstallDir string) error {
+	bins := []string{
+		filepath.Join(dstInstallDir, "bin64", "dontstarve_dedicated_server_nullrenderer_x64"),
+		filepath.Join(dstInstallDir, "bin64", "dontstarve_dedicated_server_nullrenderer_x64_luajit"),
+		filepath.Join(dstInstallDir, "bin", "dontstarve_dedicated_server_nullrenderer"),
+	}
+	for _, bin := range bins {
+		info, err := os.Stat(bin)
+		if err != nil {
+			continue // 该变体未安装则跳过（幂等）
+		}
+		if info.Mode()&0100 != 0 {
+			continue
+		}
+		if err := os.Chmod(bin, 0755); err != nil {
+			return err
+		}
+		log.Println("已补可执行位", bin)
 	}
 	return nil
 }

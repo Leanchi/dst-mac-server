@@ -210,3 +210,40 @@ func TestCleanGameDir(t *testing.T) {
 		t.Fatalf("目录不存在时应静默返回: %v", err)
 	}
 }
+
+func TestEnsureExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("权限位测试，Windows 跳过")
+	}
+	dir := t.TempDir()
+	for _, b := range []string{"bin64/dontstarve_dedicated_server_nullrenderer_x64", "bin64/dontstarve_dedicated_server_nullrenderer_x64_luajit"} {
+		full := filepath.Join(dir, b)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := ensureExecutable(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range []string{"bin64/dontstarve_dedicated_server_nullrenderer_x64", "bin64/dontstarve_dedicated_server_nullrenderer_x64_luajit"} {
+		info, err := os.Stat(filepath.Join(dir, b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode()&0100 == 0 {
+			t.Fatalf("可执行位未补齐: %s (mode %s)", b, info.Mode())
+		}
+	}
+
+	// 幂等：已有执行位不改动、目录缺失不报错
+	if err := ensureExecutable(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureExecutable(filepath.Join(dir, "not-exist")); err != nil {
+		t.Fatal(err)
+	}
+}
