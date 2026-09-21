@@ -79,6 +79,28 @@ box64/steamclient 下游戏启动时的创意工坊自下载慢且不稳（`ODPF
 4. "拷进去的模组不生效" → C4：WorkshopID.txt 存在？目录层级 content/322330/<id>？
 5. "删了列表还在" → C3：是否只清了一个 shard？ACF 两个 shard 都查
 
+## CDN-zip 型老模组的加载出路（2026-09-21 实测）
+
+**症状**：启用清单里的老模组（如 661253977、1898181913）每次启动都被排队下载，
+`ODPF failed entirely: 16` 超时，不加载；其余模组正常。
+
+**机理**（三条路都实测验证过，全部无效/被剪）：
+1. 这类模组内容存于 Steam CDN 的 zip（ACF details 段 `manifest=-1` + `ugchandle`），无现代 manifest
+2. 游戏内下载走 steamclient 的 ISteamHTTP，box64 下恒超时（容器直连同一 CDN URL 0.6s 可达——不是网络问题）
+3. 「已安装」的最终裁决者是 steamclient 安装态：合成 ACF `WorkshopItemsInstalled` 登记不认；
+   modindex（`<shard>/save/modindex`，格式 `KLEI     1D` + base64(4×u32 头 + zlib)）注入
+   `known_mods` 条目后，游戏启动时会对着 steamclient 态校验并**剔除**无法认证的条目
+
+**唯一可靠出路——本地模组化**：
+1. 模组目录拷到 `<游戏目录>/mods/local-<id>/`（含 modinfo.lua 即可）
+2. modoverrides.lua 键改写：`["workshop-<id>"]` → `["local-<id>"]`（configuration_options 原样保留）
+3. setup.lua 摘除对应 `ServerModSetup("<id>")`（消除下载尝试、ODPF 噪音与启动等待）
+4. 效果：12/12 加载、零 ODPF、模组阶段 7 秒完成
+
+**已知边界（待产品化）**：面板「世界配置」保存时用 DB 的 workshop 键重写 modoverrides，
+本地键会丢失。产品化方向：SeedUgcCache 启动前检测 CDN-zip 型（details manifest=-1）
+自动执行上述转换，形成自愈闭环。
+
 ## 附：世界"莫名停止"排查（2026-09-15 实测）
 
 世界运行 ~30 分钟后无声停止（日志止于 Sim paused，无错误）：**DST 官方防挂机行为**。
