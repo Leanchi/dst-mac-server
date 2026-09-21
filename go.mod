@@ -73,7 +73,6 @@ require (
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
-	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	modernc.org/libc v1.22.6 // indirect
@@ -81,3 +80,8 @@ require (
 	modernc.org/memory v1.5.0 // indirect
 	modernc.org/sqlite v1.22.1 // indirect
 )
+
+// dst-mac-server：上游库遇到瞬时 stat 错误会 os.Exit 杀掉整个面板
+// （真机踩坑：VirtioFS 返回 EDEADLK → 面板崩溃 → 容器重启硬杀正在启动的世界）
+// vendor 到 third_party 并补丁为跳过本轮轮询
+replace github.com/hpcloud/tail => ./third_party/tail
