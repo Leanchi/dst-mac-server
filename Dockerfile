@@ -53,6 +53,14 @@ FROM golang:1.24 AS builder
 # 先拷 go.mod/go.sum 单独下载依赖，充分利用层缓存
 WORKDIR /src
 COPY go.mod go.sum ./
+# replace 指向本地 third_party/tail，需先就位才能解析模块图
+COPY third_party/tail/go.mod third_party/tail/README.dst-mac-server.md ./third_party/tail/
+COPY third_party/tail/cmd third_party/tail/cmd ./third_party/tail/cmd/
+COPY third_party/tail/ratelimiter third_party/tail/ratelimiter ./third_party/tail/ratelimiter/
+COPY third_party/tail/util third_party/tail/util ./third_party/tail/util/
+COPY third_party/tail/watch third_party/tail/watch ./third_party/tail/watch/
+COPY third_party/tail/winfile third_party/tail/winfile ./third_party/tail/winfile/
+COPY third_party/tail/*.go ./third_party/tail/
 RUN go mod download
 
 # 交叉编译纯 Go 二进制（glebarez/sqlite 无 cgo，交叉编译零障碍）
