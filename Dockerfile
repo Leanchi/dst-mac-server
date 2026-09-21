@@ -30,6 +30,11 @@ RUN wget -qO /tmp/web.tar.gz \
       "https://github.com/${FRONTEND_REPO}/archive/refs/heads/${FRONTEND_REF}.tar.gz" \
     && tar -xzf /tmp/web.tar.gz -C /web --strip-components=1 \
     && rm -f /tmp/web.tar.gz
+# 本 fork 的源码级定制补丁：在上游源码解压后、构建前应用（比 sed 压缩产物稳定）。
+# 补丁基于 FRONTEND_REF=main 生成；上游大改后需更新 scripts/frontend/ 下对应补丁。
+COPY scripts/frontend/ /patches/
+RUN apk add --no-cache patch \
+    && patch -p0 < /patches/mod-search-cdnzip-filter.patch
 RUN npm config set registry "${NPM_REGISTRY}" \
     && npm ci \
     && npm run build \

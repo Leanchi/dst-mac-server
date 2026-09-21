@@ -1,0 +1,85 @@
+--- src/api/modApi.jsx	2026-09-21 09:33:55
++++ src/api/modApi.jsx	2026-09-21 09:33:55
+@@ -1,8 +1,8 @@
+ import { http } from "../utils/http";
+ 
+-async function searchMod(lang, cluster,text, page, size) {
++async function searchMod(lang, cluster, text, page, size, excludeCdnZip) {
+ 
+-    const url = `/api/mod/search?text=${text}&page=${page}&size=${size}&lang=${lang}`
++    const url = `/api/mod/search?text=${text}&page=${page}&size=${size}&lang=${lang}&excludeCdnZip=${excludeCdnZip}`
+     const response = await http.get(url,{
+         headers: {
+             'Cluster': cluster,
+--- src/pages/Mod/Workshop/index.jsx	2026-09-21 09:33:55
++++ src/pages/Mod/Workshop/index.jsx	2026-09-21 09:33:55
+@@ -1,6 +1,6 @@
+ /* eslint-disable react/prop-types */
+ import {useEffect, useState} from 'react';
+-import {Row, Col, Card, Input, Pagination, Button, message, Empty, Spin} from 'antd';
++import {Row, Col, Card, Input, Pagination, Button, message, Empty, Spin, Checkbox} from 'antd';
+ import {StarFilled} from '@ant-design/icons';
+ import {useParams} from "react-router-dom";
+ import {useTranslation} from "react-i18next";
+@@ -144,6 +144,8 @@
+     const [total, setTotal] = useState(0)
+     const [text, setText] = useState("")
+     const [searching, setSearching] = useState(false)
++    // CDN-zip 过滤默认开启：box64 环境下该类型模组无法被游戏自动下载认证
++    const [onlySupported, setOnlySupported] = useState(true)
+ 
+     const [messageApi, contextHolder] = message.useMessage();
+     const {cluster} = useParams()
+@@ -185,9 +187,9 @@
+         })
+     }
+ 
+-    const updateModList = (text, page, pageSize) => {
++    const updateModList = (text, page, pageSize, exclude = onlySupported) => {
+         setSearching(true)
+-        searchMod(lang, cluster, text, page, pageSize).then(data => {
++        searchMod(lang, cluster, text, page, pageSize, exclude).then(data => {
+             setModList(data.data.data)
+             setPage(data.data.page)
+             setPageSize(data.data.size)
+@@ -217,18 +219,28 @@
+         <>
+             {contextHolder}
+ 
+-            <Search
+-                placeholder={t('mod.search.placeholder')}
+-                allowClear
+-                enterButton
+-                // size="large"
+-                loading={searching}
+-                onSearch={onSearch}
+-                style={{
+-                    // width: '300px',
+-                    marginBottom: '24px',
+-                }}
+-            />
++            <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px'}}>
++                <Search
++                    placeholder={t('mod.search.placeholder')}
++                    allowClear
++                    enterButton
++                    // size="large"
++                    loading={searching}
++                    onSearch={onSearch}
++                    style={{flex: 1}}
++                />
++                <Checkbox
++                    checked={onlySupported}
++                    onChange={(e) => {
++                        setOnlySupported(e.target.checked)
++                        if (text) {
++                            updateModList(text, 1, pageSize, e.target.checked)
++                        }
++                    }}
++                >
++                    仅显示可自动加载的模组
++                </Checkbox>
++            </div>
+ 
+             <Spin spinning={searching}>
+                 {modList.length === 0 && !searching ? (
