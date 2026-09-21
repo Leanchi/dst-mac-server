@@ -12,7 +12,7 @@
          headers: {
              'Cluster': cluster,
 --- src/pages/Mod/Workshop/index.jsx	2026-09-21 09:33:55
-+++ src/pages/Mod/Workshop/index.jsx	2026-09-21 09:33:55
++++ src/pages/Mod/Workshop/index.jsx	2026-09-21 09:53:36
 @@ -1,6 +1,6 @@
  /* eslint-disable react/prop-types */
  import {useEffect, useState} from 'react';
@@ -21,7 +21,28 @@
  import {StarFilled} from '@ant-design/icons';
  import {useParams} from "react-router-dom";
  import {useTranslation} from "react-i18next";
-@@ -144,6 +144,8 @@
+@@ -68,6 +68,20 @@
+                 style={{marginBottom: 8}}
+             />
+ 
++            {modinfo.cdnZip && (
++                <div style={{
++                    fontSize: '12px',
++                    color: '#cf1322',
++                    background: '#fff1f0',
++                    border: '1px solid #ffa39e',
++                    borderRadius: 4,
++                    padding: '4px 8px',
++                    marginBottom: 8,
++                }}>
++                    ⚠️ CDN-zip 旧版封装，本环境无法自动加载，不建议添加
++                </div>
++            )}
++
+             <div style={{
+                 fontSize: '12px',
+                 color: '#999',
+@@ -144,6 +158,8 @@
      const [total, setTotal] = useState(0)
      const [text, setText] = useState("")
      const [searching, setSearching] = useState(false)
@@ -30,7 +51,7 @@
  
      const [messageApi, contextHolder] = message.useMessage();
      const {cluster} = useParams()
-@@ -185,9 +187,9 @@
+@@ -185,9 +201,9 @@
          })
      }
  
@@ -42,7 +63,7 @@
              setModList(data.data.data)
              setPage(data.data.page)
              setPageSize(data.data.size)
-@@ -217,18 +219,28 @@
+@@ -217,18 +233,28 @@
          <>
              {contextHolder}
  
