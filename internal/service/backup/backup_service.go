@@ -1,6 +1,9 @@
 package backup
 
 import (
+	"errors"
+	"fmt"
+
 	"dst-admin-go/internal/database"
 	"dst-admin-go/internal/model"
 	"dst-admin-go/internal/pkg/context"
@@ -123,41 +126,76 @@ func (b *BackupService) DeleteBackup(ctx *gin.Context, fileNames []string) {
 
 }
 
-func (b *BackupService) RestoreBackup(ctx *gin.Context, backupName string) {
+// validateBackupName 校验备份文件名：仅允许单文件名（防路径穿越），且必须存在
+func validateBackupName(backupDir, backupName string) (string, error) {
+	if backupName == "" || strings.ContainsAny(backupName, "/\\") || strings.Contains(backupName, "..") {
+		return "", errors.New("非法备份文件名: " + backupName)
+	}
+	filePath := filepath.Join(backupDir, backupName)
+	if !fileUtils.Exists(filePath) {
+		return "", errors.New("备份文件不存在: " + backupName)
+	}
+	return filePath, nil
+}
 
+func (b *BackupService) RestoreBackup(ctx *gin.Context, backupName string) error {
 	clusterName := context.GetClusterName(ctx)
 	config, err := b.dstConfig.GetDstConfig(clusterName)
 	if err != nil {
-		log.Println("failed to get dst config:", err)
-		return
+		return err
+	}
+	filePath, err := validateBackupName(config.Backup, backupName)
+	if err != nil {
+		return err
+	}
+	clusterPath := b.archive.ClusterPath(clusterName)
+
+	// 恢复前先优雅停服：运行中的世界持续写盘，边跑边覆盖必然产生脏数据
+	if err := b.gameProcess.StopAll(clusterName); err != nil {
+		log.Println("恢复前停服失败（继续恢复）", err)
 	}
 
-	filePath := filepath.Join(config.Backup, backupName)
-	clusterPath := filepath.Join(b.archive.ClusterPath(clusterName))
-	err = fileUtils.DeleteDir(clusterPath)
-	if err != nil {
-		log.Panicln("删除失败,", clusterPath, err)
+	if err := restoreSwapIn(filePath, clusterPath); err != nil {
+		return err
 	}
-	log.Println("正在恢复存档", filePath, filepath.Join(b.archive.KleiBasePath(clusterName)))
+	log.Println("恢复备份成功", filePath, "→", clusterPath)
 
-	// err = zip.Unzip2(filePath, filepath.Join(constant.HOME_PATH, ".klei/DoNotStarveTogether"), cluster.ClusterName)
-	err = zip.Unzip3(filePath, clusterPath)
-	if err != nil {
-		log.Panicln("解压失败,", filePath, clusterPath, err)
-	}
-	// 安装mod
+	// 安装mod：按备份内 modoverrides 重生成 setup.lua
 	modoverride, err := fileUtils.ReadFile(b.archive.ModoverridesPath(clusterName, "Master"))
 	if err != nil {
 		log.Println("读取模组失败", err)
 	}
-	config, err = b.dstConfig.GetDstConfig(clusterName)
-	if err != nil {
-		log.Println(err.Error())
+	if err := dstUtils.DedicatedServerModsSetup(config, modoverride); err != nil {
+		log.Println("重生成 setup.lua 失败", err)
 	}
-	err = dstUtils.DedicatedServerModsSetup(config, modoverride)
-	if err != nil {
-		log.Println(err.Error())
+	return nil
+}
+
+// restoreSwapIn 先解压到临时目录校验完整性，再原子换入。
+// 旧实现先删后解压，zip 损坏时存档直接丢失；换入失败自动回滚原存档。
+func restoreSwapIn(zipPath, clusterPath string) error {
+	tmp := clusterPath + ".restore-tmp"
+	old := clusterPath + ".restore-old"
+	_ = fileUtils.DeleteDir(tmp)
+	_ = fileUtils.DeleteDir(old)
+
+	if err := zip.Unzip3(zipPath, tmp); err != nil {
+		_ = fileUtils.DeleteDir(tmp)
+		return fmt.Errorf("解压备份失败: %w", err)
 	}
+	if err := os.Rename(clusterPath, old); err != nil && !os.IsNotExist(err) {
+		_ = fileUtils.DeleteDir(tmp)
+		return fmt.Errorf("暂存原存档失败: %w", err)
+	}
+	if err := os.Rename(tmp, clusterPath); err != nil {
+		if rbErr := os.Rename(old, clusterPath); rbErr != nil {
+			return fmt.Errorf("换入失败且回滚失败（原存档仍保留在 %s）: %w", old, err)
+		}
+		_ = fileUtils.DeleteDir(tmp)
+		return fmt.Errorf("换入恢复目录失败: %w", err)
+	}
+	_ = fileUtils.DeleteDir(old)
+	return nil
 }
 
 func (b *BackupService) CreateBackup(clusterName, backupName string) {

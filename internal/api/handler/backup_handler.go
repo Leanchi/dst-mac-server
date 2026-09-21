@@ -29,6 +29,7 @@ func (h *BackupHandler) RegisterRoute(router *gin.RouterGroup) {
 	router.DELETE("/api/game/backup", h.DeleteBackup)
 	router.PUT("/api/game/backup", h.RenameBackup)
 	router.GET("/api/game/backup/download", h.DownloadBackup)
+	router.GET("/api/game/backup/restore", h.RestoreBackup)
 	router.POST("/api/game/backup/upload", h.UploadBackup)
 	router.GET("/backup/restore", h.RestoreBackup)
 	router.POST("/api/game/backup/snapshot/setting", h.SaveBackupSnapshotsSetting)
@@ -73,6 +74,32 @@ func (h *BackupHandler) DownloadBackup(ctx *gin.Context) {
 	h.backupService.DownloadBackup(ctx)
 }
 
+// RestoreBackup 恢复备份
+// @Summary 恢复备份
+// @Description 优雅停服后用指定备份覆盖集群存档（先校验后换入，失败自动回滚）
+// @Tags backup
+// @Accept json
+// @Produce json
+// @Param backupName query string true "备份文件名"
+// @Success 200 {object} response.Response
+// @Router /api/game/backup/restore [get]
+func (h *BackupHandler) RestoreBackup(ctx *gin.Context) {
+	backupName := ctx.Query("backupName")
+	if backupName == "" {
+		ctx.JSON(http.StatusOK, response.Response{Code: 400, Msg: "backupName query parameter is required"})
+		return
+	}
+	if err := h.backupService.RestoreBackup(ctx, backupName); err != nil {
+		ctx.JSON(http.StatusOK, response.Response{Code: 500, Msg: "failed to restore backup: " + err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, response.Response{
+		Code: 200,
+		Msg:  "restore backup success",
+		Data: nil,
+	})
+}
+
 // GetBackupList 获取备份列表
 // @Summary 获取备份列表
 // @Description 获取当前集群的所有备份文件列表
@@ -113,27 +140,6 @@ func (h *BackupHandler) RenameBackup(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response.Response{
 		Code: 200,
 		Msg:  "rename backup success",
-		Data: nil,
-	})
-}
-
-// RestoreBackup 恢复备份
-// @Summary 恢复备份
-// @Description 从备份文件恢复游戏存档
-// @Tags backup
-// @Accept json
-// @Produce json
-// @Param backupName query string true "备份文件名"
-// @Success 200 {object} response.Response
-// @Router /backup/restore [get]
-func (h *BackupHandler) RestoreBackup(ctx *gin.Context) {
-	backupName := ctx.Query("backupName")
-
-	h.backupService.RestoreBackup(ctx, backupName)
-
-	ctx.JSON(http.StatusOK, response.Response{
-		Code: 200,
-		Msg:  "restore backup success",
 		Data: nil,
 	})
 }
