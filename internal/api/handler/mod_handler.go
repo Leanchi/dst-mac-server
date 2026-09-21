@@ -53,6 +53,7 @@ func (h *ModHandler) RegisterRoute(router *gin.RouterGroup) {
 // @Param page query int false "页码" default(1)
 // @Param size query int false "每页数量" default(10)
 // @Param lang query string false "语言" default(zh)
+// @Param excludeCdnZip query bool false "过滤 CDN-zip 型老模组（box64 下无法自动加载），默认 true" default(true)
 // @Success 200 {object} response.Response{}
 // @Router /api/mod/search [get]
 func (h *ModHandler) SearchModList(ctx *gin.Context) {
@@ -60,8 +61,10 @@ func (h *ModHandler) SearchModList(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(ctx.DefaultQuery("size", "10"))
 	lang := ctx.DefaultQuery("lang", "zh")
+	// CDN-zip 过滤默认开启：本面板运行于 box64，该类型模组无法被游戏自动下载认证
+	excludeCdnZip := ctx.DefaultQuery("excludeCdnZip", "true") != "false"
 
-	data, err := h.modService.SearchModList(text, page, size, lang)
+	data, err := h.modService.SearchModList(text, page, size, lang, excludeCdnZip)
 	if err != nil {
 		response.FailWithMessage("搜索mod失败: "+err.Error(), ctx)
 		return

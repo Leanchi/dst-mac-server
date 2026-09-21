@@ -168,6 +168,8 @@ type ModInfo struct {
 		Num  int `json:"num"`
 	} `json:"vote"`
 	Child []string `json:"child,omitempty"`
+	// CdnZip 标识该模组为 CDN-zip 旧版封装（box64 环境无法自动加载，见 cdn_zip.go）
+	CdnZip bool `json:"cdnZip,omitempty"`
 }
 
 // Publishedfiledetail Steam API 返回的模组详情
@@ -215,7 +217,10 @@ type WorkshopItem struct {
 }
 
 // SearchModList 搜索模组列表
-func (s *ModService) SearchModList(text string, page, size int, lang string) (*SearchResult, error) {
+// SearchModList 搜索模组列表。
+// excludeCdnZip 为 true 时过滤 CDN-zip 型老模组（本面板运行于 box64 环境，
+// 该类型无法被游戏自动下载认证，默认过滤；传 false 可查看全部并附带警告标记）。
+func (s *ModService) SearchModList(text string, page, size int, lang string, excludeCdnZip bool) (*SearchResult, error) {
 	// 判断是否是modID搜索
 	modId, ok := isModId(text)
 	if ok {
@@ -300,6 +305,9 @@ func (s *ModService) SearchModList(text string, page, size int, lang string) (*S
 					Num:  int(voteData["votes_up"].(float64) + voteData["votes_down"].(float64)),
 				},
 			}
+			if filename, ok := modInfo["filename"].(string); ok && isCdnZipMod(filename) {
+				mod.CdnZip = true
+			}
 			if modInfo["num_children"].(float64) != 0 {
 				children := modInfo["children"].([]interface{})
 				child := make([]string, len(children))
@@ -328,7 +336,7 @@ func (s *ModService) SearchModList(text string, page, size int, lang string) (*S
 		Size:      size,
 		Total:     total,
 		TotalPage: int(math.Ceil(float64(total) / float64(size))),
-		Data:      modList,
+		Data:      applyCdnZipPolicy(modList, excludeCdnZip),
 	}, nil
 }
 
@@ -1111,6 +1119,11 @@ func (s *ModService) searchModInfoByWorkshopId(modID int) ModInfo {
 	description := data2["file_description"].(string)
 	img = fmt.Sprintf("%s?imw=64&imh=64&ima=fit&impolicy=Letterbox&imcolor=%%23000000&letterbox=true", img)
 
+	cdnZip := false
+	if filename, ok := data2["filename"].(string); ok && isCdnZipMod(filename) {
+		cdnZip = true
+		description += cdnZipWarningDesc
+	}
 	return ModInfo{
 		ID:     modId,
 		Name:   name,
@@ -1119,6 +1132,7 @@ func (s *ModService) searchModInfoByWorkshopId(modID int) ModInfo {
 		Time:   int(data2["time_updated"].(float64)),
 		Sub:    int(data2["subscriptions"].(float64)),
 		Img:    img,
+		CdnZip: cdnZip,
 	}
 }
 

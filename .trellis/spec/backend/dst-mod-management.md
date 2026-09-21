@@ -55,6 +55,18 @@ DST 新版模组缓存路径为 `content/322330/<id>`（含 modinfo.lua 在目�
 
 ---
 
+## CDN-zip 型识别与搜索过滤（2026-09-21 上线）
+
+**分类器**：Steam API（QueryFiles/GetDetails）条目的 `filename == "mod_publish_data_file.zip"`
+⇒ CDN-zip 型老模组（实测 661253977/1898181913 均命中，10 个正常模组均不命中）。
+
+**面板策略**（`internal/service/mod/cdn_zip.go`）：
+- `/api/mod/search` 默认 `excludeCdnZip=true` 过滤该类型（本面板运行于 box64，
+  此类型无法被游戏自动下载认证）；传 `excludeCdnZip=false` 查看全部
+- 关闭过滤时结果项 `cdnZip=true` 且 desc 注入 ⚠️ 警告行（前端现成展示 desc，零 UI 改动）
+- 按 ID 直查（`searchModInfoByWorkshopId`）不过滤但标记 + 警告——按 ID 找是有意为之
+- 过滤只作用于当页，Steam 返回的 Total 为近似值
+
 ## 启动前播种（SeedUgcCache 契约）
 
 box64/steamclient 下游戏启动时的创意工坊自下载慢且不稳（`ODPF failed entirely` /
