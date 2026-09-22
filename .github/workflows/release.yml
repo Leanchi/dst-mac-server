@@ -32,28 +32,19 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
-        if: github.ref_type == 'tag'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push GHCR
+      # 仅构建（守门/验证）：tag 推送时若未配置 Docker Hub secrets 则构建不推送
+      - name: Build (no push)
+        if: github.ref_type == 'tag' && env.DOCKERHUB_USERNAME == ''
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/arm64
-          push: ${{ github.ref_type == 'tag' }}
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+          push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Docker Hub 为可选发布目标：namespace 即 DOCKERHUB_USERNAME。
-      # 配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN 两个 secrets 后自动启用。
+      # 发布目标只有 Docker Hub（国内拉取友好；GHCR 分发已于 2026-09-22 移除，
+      # 源码分发义务由本公开仓库满足）
       - name: Login to Docker Hub
         if: github.ref_type == 'tag' && env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@v3
@@ -83,7 +74,7 @@ jobs:
 
             ```bash
             # GHCR（随 tag 自动发布）
-            docker pull ghcr.io/${{ github.repository_owner }}/dst-mac-server:${{ github.ref_name }}
+            docker pull docker.io/${{ secrets.DOCKERHUB_USERNAME }}/dst-mac-server:${{ github.ref_name }}
 
             # Docker Hub（若已配置 DOCKERHUB secrets）
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/dst-mac-server:${{ github.ref_name }}

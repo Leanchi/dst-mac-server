@@ -37,7 +37,7 @@ docker run -d --name dst-mac-server \
   -p 10888:10888/udp -p 10998:10998/udp -p 10999:10999/udp \
   -v ./data:/app/data \
   -v ./dst-server:/app/dst-dedicated-server \
-  ghcr.io/<YOUR>/dst-mac-server:latest
+  <DOCKERHUB_USER>/dst-mac-server:latest
 ```
 
 > 镜像尚未发布前可本地构建：`docker buildx build --platform linux/arm64 -t dst-mac-server:dev .`
