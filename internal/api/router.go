@@ -99,7 +99,7 @@ func Register(cfg *config.Config, db *gorm.DB, router *gin.RouterGroup) {
 	levelService := level.NewLevelService(gameProcess, dstConfigService, resolverService, levelConfigUtils)
 	playerService := player.NewPlayerService(resolverService)
 	gameArchiveService := gameArchive.NewGameArchive(gameConfigService, levelService, resolverService)
-	modService := mod.NewModService(db, dstConfigService, resolverService)
+	modService := mod.NewModService(db, dstConfigService, resolverService, mod.ResolveSteamAPIKey(cfg.SteamAPIKey))
 	scheduleService := schedule.NewScheduleService(db, gameProcess, backupService, updateService, dstConfigService)
 
 	dstMapGenerator := dstMap.NewDSTMapGenerator()

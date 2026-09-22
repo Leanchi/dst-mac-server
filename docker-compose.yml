@@ -10,6 +10,9 @@
 #                      默认仅在校测到 appmanifest_343050.acf 缺失时才安装
 #   SKIP_GAME_INSTALL  设为 1 时跳过游戏首装与 steamclient.so 就位，直接启动面板
 #                      （CI 冒烟/调试用；正常使用请勿设置）
+#   STEAM_API_KEY      模组搜索用的 Steam Web API key（https://steamcommunity.com/dev/apikey
+#                      免费申请）。也可写入挂载的 config.yml steamAPIKey 字段。
+#                      建议放在 docker-compose.override.yml（不入库）
 services:
   dst-mac-server:
     image: dst-mac-server:dev
@@ -20,6 +23,9 @@ services:
       - "10888:10888/udp" # 饥荒世界（地上）通信端口
       - "10998:10998/udp" # 洞穴世界通信端口
       - "10999:10999/udp" # 森林世界通信端口（按集群配置）
+    environment:
+      # 模组搜索用 Steam API key（推荐放 override 文件，勿提交真实值）
+      - STEAM_API_KEY=${STEAM_API_KEY:-}
     volumes:
       # 面板持久化数据：dst_config、password.txt、sqlite 数据库(dst-db)、
       # 存档(DoNotStarveTogether/)、备份(backup/)、模组缓存(mod/)

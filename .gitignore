@@ -39,3 +39,8 @@ yarn-error.log*
 /script/py-dst-cli/data
 
 /test
+
+# 本地部署私密配置（Steam key 等）
+docker-compose.override.yml
+data/
+dst-server/

@@ -17,6 +17,27 @@
 - 📜 实时日志查看、游戏控制台、宕机自动恢复
 - ⏰ 定时任务（自动更新检测、定时公告等）
 
+## Steam API Key（模组搜索）
+
+模组搜索/订阅需要 Steam Web API key，[免费申请](https://steamcommunity.com/dev/apikey)（登录任意 Steam 账号即可，域名随便填）。
+
+两种配置方式任选：
+
+```yaml
+# 方式一：docker-compose.override.yml（推荐，不入库）
+services:
+  dst-mac-server:
+    environment:
+      - STEAM_API_KEY=你的key
+```
+
+```yaml
+# 方式二：config.yml
+steamAPIKey: "你的key"
+```
+
+> 上游曾将某个 key 硬编码在源码中分发，本项目已移除该做法并为每位部署者改为自行配置。
+
 ## 快速开始
 
 要求：Apple Silicon Mac 上的 Docker（Docker Desktop / OrbStack 均可），磁盘空间 ≥ 10GB。

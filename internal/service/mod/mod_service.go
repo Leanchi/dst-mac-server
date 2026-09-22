@@ -34,9 +34,8 @@ import (
 )
 
 const (
-	steamAPIKey = "REMOVED_UPSTREAM_STEAM_KEY"
-	appID       = 322330
-	language    = 6
+	appID    = 322330
+	language = 6
 )
 
 func steamAuthorProfileURL(steamID string) string {
@@ -62,7 +61,7 @@ func steamIDFromAuthor(author string) string {
 	return ""
 }
 
-func fetchSteamPersonaNames(steamIDs []string) map[string]string {
+func fetchSteamPersonaNames(key string, steamIDs []string) map[string]string {
 	result := make(map[string]string)
 	seen := make(map[string]bool)
 	unique := make([]string, 0, len(steamIDs))
@@ -85,7 +84,7 @@ func fetchSteamPersonaNames(steamIDs []string) map[string]string {
 			end = len(unique)
 		}
 		data := url.Values{}
-		data.Set("key", steamAPIKey)
+		data.Set("key", key)
 		data.Set("steamids", strings.Join(unique[i:end], ","))
 		urlStr := "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?" + data.Encode()
 		resp, err := client.Get(urlStr)
@@ -115,12 +114,12 @@ func fetchSteamPersonaNames(steamIDs []string) map[string]string {
 	return result
 }
 
-func steamPersonaName(steamID string) string {
+func steamPersonaName(key string, steamID string) string {
 	steamID = steamIDFromAuthor(steamID)
 	if steamID == "" {
 		return ""
 	}
-	if names := fetchSteamPersonaNames([]string{steamID}); names[steamID] != "" {
+	if names := fetchSteamPersonaNames(key, []string{steamID}); names[steamID] != "" {
 		return names[steamID]
 	}
 	return steamID
@@ -130,14 +129,26 @@ type ModService struct {
 	db           *gorm.DB
 	dstConfig    dstConfig.Config
 	pathResolver *archive.PathResolver
+	steamAPIKey  string
 }
 
-func NewModService(db *gorm.DB, config dstConfig.Config, pathResolver *archive.PathResolver) *ModService {
+func NewModService(db *gorm.DB, config dstConfig.Config, pathResolver *archive.PathResolver, steamAPIKey string) *ModService {
 	return &ModService{
 		db:           db,
 		dstConfig:    config,
 		pathResolver: pathResolver,
+		steamAPIKey:  steamAPIKey,
 	}
+}
+
+// resolveSteamAPIKey 解析 Steam Web API key：环境变量 STEAM_API_KEY 优先，
+// 其次 config.yml 的 steamAPIKey。key 曾硬编码于上游源码（属上游作者的凭据，
+// 已移除）；每个部署应使用自己的 key：https://steamcommunity.com/dev/apikey
+func ResolveSteamAPIKey(cfgKey string) string {
+	if v := strings.TrimSpace(os.Getenv("STEAM_API_KEY")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(cfgKey)
 }
 
 // SearchResult 搜索结果
@@ -238,11 +249,15 @@ func (s *ModService) SearchModList(text string, page, size int, lang string, exc
 		}, nil
 	}
 
+	if s.steamAPIKey == "" {
+		return nil, errors.New("未配置 Steam API Key：在 config.yml 设 steamAPIKey 或环境变量 STEAM_API_KEY（https://steamcommunity.com/dev/apikey 免费申请）")
+	}
+
 	// 调用 Steam API 搜索
 	urlStr := "http://api.steampowered.com/IPublishedFileService/QueryFiles/v1/"
 	data := url.Values{
 		"page":             {fmt.Sprintf("%d", page)},
-		"key":              {steamAPIKey},
+		"key":              {s.steamAPIKey},
 		"appid":            {"322330"},
 		"language":         {"6"},
 		"return_tags":      {"true"},
@@ -324,7 +339,7 @@ func (s *ModService) SearchModList(text string, page, size int, lang string, exc
 	for _, mod := range modList {
 		authorIDs = append(authorIDs, mod.Author)
 	}
-	authorNames := fetchSteamPersonaNames(authorIDs)
+	authorNames := fetchSteamPersonaNames(s.steamAPIKey, authorIDs)
 	for i := range modList {
 		if name := authorNames[steamIDFromAuthor(modList[i].Author)]; name != "" {
 			modList[i].Author = name
@@ -350,7 +365,7 @@ func (s *ModService) SubscribeModByModId(clusterName, modId, lang string) (*mode
 	// 从Steam API获取mod信息
 	urlStr := "http://api.steampowered.com/IPublishedFileService/GetDetails/v1/"
 	data := url.Values{}
-	data.Set("key", steamAPIKey)
+	data.Set("key", s.steamAPIKey)
 	data.Set("language", "6")
 	data.Set("publishedfileids[0]", modId)
 	urlStr = urlStr + "?" + data.Encode()
@@ -380,7 +395,7 @@ func (s *ModService) SubscribeModByModId(clusterName, modId, lang string) (*mode
 
 	data2 := dataList[0].(map[string]interface{})
 	img := data2["preview_url"].(string)
-	auth := steamPersonaName(data2["creator"].(string))
+	auth := steamPersonaName(s.steamAPIKey, data2["creator"].(string))
 
 	name := data2["title"].(string)
 	lastTime := data2["time_updated"].(float64)
@@ -469,7 +484,7 @@ func (s *ModService) GetMyModList() ([]model.ModInfo, error) {
 			authorIDs = append(authorIDs, steamID)
 		}
 	}
-	authorNames := fetchSteamPersonaNames(authorIDs)
+	authorNames := fetchSteamPersonaNames(s.steamAPIKey, authorIDs)
 	for i := range modInfos {
 		if name := authorNames[steamIDFromAuthor(modInfos[i].Auth)]; name != "" {
 			modInfos[i].Auth = name
@@ -622,7 +637,7 @@ func (s *ModService) GetUgcModInfo(clusterName, levelName string) ([]WorkshopIte
 
 	urlStr := "http://api.steampowered.com/IPublishedFileService/GetDetails/v1/"
 	data := url.Values{}
-	data.Set("key", steamAPIKey)
+	data.Set("key", s.steamAPIKey)
 	data.Set("language", "6")
 	for i := range modIds {
 		data.Set("publishedfileids["+strconv.Itoa(i)+"]", modIds[i])
@@ -1078,7 +1093,7 @@ func (s *ModService) getVersion(tags interface{}) string {
 func (s *ModService) searchModInfoByWorkshopId(modID int) ModInfo {
 	urlStr := "http://api.steampowered.com/IPublishedFileService/GetDetails/v1/"
 	data := url.Values{}
-	data.Set("key", steamAPIKey)
+	data.Set("key", s.steamAPIKey)
 	data.Set("language", "6")
 	data.Set("publishedfileids[0]", strconv.Itoa(modID))
 	urlStr = urlStr + "?" + data.Encode()
@@ -1112,7 +1127,7 @@ func (s *ModService) searchModInfoByWorkshopId(modID int) ModInfo {
 	}
 
 	img := data2["preview_url"].(string)
-	auth := steamPersonaName(data2["creator"].(string))
+	auth := steamPersonaName(s.steamAPIKey, data2["creator"].(string))
 
 	modId := data2["publishedfileid"].(string)
 	name := data2["title"].(string)
@@ -1201,7 +1216,7 @@ func (s *ModService) addModInfoToDb(clusterName, lang, modid string) error {
 func (s *ModService) getModInfo2(modID string) (*model.ModInfo, error) {
 	urlStr := "http://api.steampowered.com/IPublishedFileService/GetDetails/v1/"
 	data := url.Values{}
-	data.Set("key", steamAPIKey)
+	data.Set("key", s.steamAPIKey)
 	data.Set("language", "6")
 	data.Set("publishedfileids[0]", modID)
 	urlStr = urlStr + "?" + data.Encode()
@@ -1231,7 +1246,7 @@ func (s *ModService) getModInfo2(modID string) (*model.ModInfo, error) {
 
 	data2 := dataList[0].(map[string]interface{})
 	img := data2["preview_url"].(string)
-	auth := steamPersonaName(data2["creator"].(string))
+	auth := steamPersonaName(s.steamAPIKey, data2["creator"].(string))
 
 	modId := data2["publishedfileid"].(string)
 	name := data2["title"].(string)
@@ -1288,7 +1303,7 @@ func (s *ModService) getPublishedFileDetailsBatched(workshopIds []string, batchS
 func (s *ModService) getPublishedFileDetailsWithGet(workshopIds []string) ([]Publishedfiledetail, error) {
 	urlStr := "http://api.steampowered.com/IPublishedFileService/GetDetails/v1/"
 	data := url.Values{}
-	data.Set("key", steamAPIKey)
+	data.Set("key", s.steamAPIKey)
 	data.Set("language", "6")
 	for i := range workshopIds {
 		data.Set("publishedfileids["+strconv.Itoa(i)+"]", workshopIds[i])
