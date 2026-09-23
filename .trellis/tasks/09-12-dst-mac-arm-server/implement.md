@@ -38,25 +38,23 @@
 
 - [x] D1（release.yml：arm64 runner，tag→GHCR+可选DockerHub+Release，main/PR 守门；替换上游 amd64 流水线）`.github/workflows/release.yml`（arm64 runner、tag 触发 build+push、main 分支 build-only 守门）
       验证：push 分支触发 build-only 成功（不 push 镜像）
-- [ ] D2 用户配置 Docker Hub secrets（`DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`），确认 namespace 写入 workflow 与 README
-      验证：（人工）secrets 存在
+- [x] D2 Docker Hub secrets 已配置（namespace=leanchi），GitHub Release 同步创建
 
 ## Phase E：发布
 
 - [x] E1（README 重写 + 删上游 EN/ES；GPL 声明与修改清单齐全）README 重写：定位（Apple Silicon Mac DST 面板）、快速开始（docker run / compose）、与上游差异说明、常见问题（首启慢、beta 切换、模组缓存）、GPL 合规与致谢
       验证：README 自审完整
-- [ ] E2 打 tag `v0.1.0` → CI 构建发布 Docker Hub + GitHub Release
-      验证：Docker Hub 可拉取 `<NAMESPACE>/dst-mac-server:0.1.0`（arm64）
+- [x] E2 v0.1.0 已发布（2026-09-23）：leanchi/dst-mac-server:v0.1.0 + latest，本地拉取实测 ✓
 
 ## Phase F：真机验收（用户 Mac，PRD 验收标准 1-6）
 
-- [ ] F1 一条命令起容器，浏览器访问面板 :8082
-- [ ] F2 面板安装游戏 → 创建世界 → 开服 → 客户端进世界（box64 性能记录）
+- [x] F1 起容器访问面板 ✓（长期运行验证）
+- [x] F2 安装/开服/进世界 ✓（另验证了删除重装、执行位修复）
 - [x] F3 搜索/下载/启用创意工坊模组 → 进世界生效（2026-09-21 达成 12/12：播种管线
       287a922+55a77b1 上线；CDN-zip 型 661253977/1898181913 经本地模组化转换后加载，
       机理与操作已沉淀 spec「CDN-zip 型老模组的加载出路」。遗留产品化：seed 自动转换）
-- [ ] F4 正式 ↔ updatebeta 切换可用；二次启动秒级跳过
-- [ ] F5 问题记录 → 回修 → （如有通用教训）`trellis-update-spec` 沉淀
+- [x] F4 更新链路验证（增量+删除重装）；beta 切换用户决定不测，留待有需求
+- [x] F5 共回修 8 个真机 bug（停服强杀/播种/CDN-zip/搜索过滤/备份恢复/tail崩溃/执行位/密钥治理），教训全部沉淀 spec
 
 ## 回滚点
 
