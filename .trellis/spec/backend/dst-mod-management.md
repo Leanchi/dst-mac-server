@@ -92,6 +92,30 @@ box64/steamclient 下游戏启动时的创意工坊自下载慢且不稳（`ODPF
 5. "删了列表还在" → C3：是否只清了一个 shard？ACF 两个 shard 都查
 6. "下载报网络问题" → 先看服务日志有无「正在执行 DepotDownloader」：无 = Steam API 段挂（见 §下载链路的网络契约）；有但卡 manifest = CDN 段挂（代理）
 7. "下载显示成功但文件不存在" → 查 mod_infos.mod_config 是否为 '{}'（旧版静默落库脏记录，2026-10-05 已修复为如实报错）
+8. "客户端报需要 Steam 不可用的模组" → modoverrides 里有 local- 键且该 modinfo
+   `all_clients_require_mod = true`（见 CDN-zip 出路的客户端必装边界）
+9. "客户端无应答/连不上" → 先查 /proc/net/udp 实际监听端口：出现 3 万+ 高位随机端口
+   而非 10998/10999 = server.ini 端口被清零（见 §面板托管文件的写入者契约与空值陷阱）
+
+## 面板托管文件的写入者契约与空值陷阱（2026-10-05）
+
+cluster.ini / server.ini / modoverrides.lua / leveldataoverride.lua / setup.lua 均会被
+面板「房间设置」等表单保存重写（levelConfig.SaveLevelConfig / level.initLevel /
+gameConfig）。**手改这些文件只是临时态，任何一次面板保存都可能覆盖回去**——动手前
+先枚举"谁还会写它"（grep 写入点 + 盯 mtime 与面板日志对时），否则就是打地鼠
+（2026-10-05 实测：端口手修 3 次被覆盖 3 次，最终靠 10-02 备份原样恢复才稳定）。
+
+- **空表单字段 = 破坏性写入**（上游缺陷）：端口字段空着保存 → `server.ini`
+  `server_port = 0` → 引擎每次启动随机挑端口 → 大厅/c_connect 全部无应答；同一次
+  保存还会把 leveldataoverride.lua 写成 0 字节（面板"世界设置"页报解析失败）。
+  **保存房间设置前必看端口字段：森林 10999 / 洞穴 10998，空着就填上**
+- **leveldataoverride.lua 空文件语义（反直觉）**：0 字节 = 合法（游戏忽略之，世界
+  照常加载）；`return {}` = 启动期 `GetLevelDataOverride` assert 失败、世界无声死亡。
+  **恢复世界设置请从备份 zip 提取原始文件，不要手工构造最小 Lua**
+- **存在无 HTTP 请求触发的 server.ini 写入**（2026-10-05 21:35 实测一次，未复现、
+  未定位）：手改端口后若再被归零，用 mtime 对照面板日志深挖
+- 正确的配置回滚路径：面板备份库 zip → 仅提取配置文件覆盖（不回滚存档），
+  当前态另存 `.pre-restore` 后缀
 
 ## 下载链路的网络契约（2026-10-05 实测沉淀）
 
@@ -142,6 +166,13 @@ box64/steamclient 下游戏启动时的创意工坊自下载慢且不稳（`ODPF
 **已知边界（待产品化）**：面板「世界配置」保存时用 DB 的 workshop 键重写 modoverrides，
 本地键会丢失。产品化方向：SeedUgcCache 启动前检测 CDN-zip 型（details manifest=-1）
 自动执行上述转换，形成自愈闭环。
+
+**客户端必装边界（2026-10-05 实测补充）**：`all_clients_require_mod = true` 的模组本地化后
+**会挡客户端进服**——客户端按文件夹名（`local-<id>`）索要模组，工坊不存在该名字，报
+"服务器需要 Steam 不可用的模组，需手动下载"。此类模组两条出路：转换时同步把 modinfo
+该项改为 `false`（未安装的客户端只是失去显示功能、可正常进服），或放弃转换。
+实测 347079953（食物数值）、362175979（虫洞标记）均命中；1898181913（冰箱返鲜）为
+false 不受影响。2026-10-05 用户决定弃用全部 CDN-zip 模组，全部 local- 键已移除。
 
 ## 附：世界"莫名停止"排查（2026-09-15 实测）
 

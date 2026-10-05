@@ -39,3 +39,9 @@ func waitForProcessExit(status func() (bool, error), timeout, interval time.Dura
 ## 5. Known Issues
 
 - `windowGameCli.go:445` has a pre-existing `go vet` `atomic.Bool` lock-copy warning (Windows path, untouched).
+- **启动期 UGC 自下载阶段无声死亡**（2026-10-05 多次复现）：启用清单含 CDN-zip 型模组时，游戏在该阶段反复重下直至世界死亡（僵尸进程残留）。治本见 mod spec「CDN-zip 型老模组的加载出路」；用户已弃用全部 CDN-zip 模组。
+- **"服务器无应答"第一查是实际监听端口**：`cat /proc/net/udp`（十六进制转十进制）
+  出现随机高位端口而非 10998/10999 → server.ini 端口被面板空值保存清零（详见 mod spec
+  §面板托管文件的写入者契约与空值陷阱）。容器内 netstat 不可靠，以 /proc/net/udp 为准。
+- **面板不收割死亡世界的子进程**：世界死亡后 `<defunct>` 僵尸进程累积（父进程未 wait），
+  不阻塞运行但可作为"死亡史"证据（数量 = 死亡次数）。
