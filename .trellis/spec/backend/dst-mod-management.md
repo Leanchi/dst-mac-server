@@ -112,8 +112,17 @@ gameConfig）。**手改这些文件只是临时态，任何一次面板保存�
 - **leveldataoverride.lua 空文件语义（反直觉）**：0 字节 = 合法（游戏忽略之，世界
   照常加载）；`return {}` = 启动期 `GetLevelDataOverride` assert 失败、世界无声死亡。
   **恢复世界设置请从备份 zip 提取原始文件，不要手工构造最小 Lua**
-- **存在无 HTTP 请求触发的 server.ini 写入**（2026-10-05 21:35 实测一次，未复现、
-  未定位）：手改端口后若再被归零，用 mtime 对照面板日志深挖
+- **存在无 HTTP 请求触发的 server.ini 写入**（2026-10-05 21:35 实测一次，未复现）。
+  2026-10-06 静态排查已排除：调度器（job_tasks 表为空、九种策略零配置写入）、
+  entrypoint（无看护循环）、autoCheck（仅表模型无消费方）、StartBeforeMiddleware
+  （仅写 level.json 与 customcommands.lua）、游戏进程与停服清理协程。代码中写
+  server.ini 的路径仅有 HTTP 层的关卡操作（PUT /api/cluster/level、关卡创建/修改/
+  删除 → level.initLevel / levelConfig.initLevel）。与 21:35:38 无 HTTP 写入的观测
+  存在矛盾——最可能的解释是当晚排查方自身异步命令与用户操作的时间线纠缠（排查中
+  曾对同一批文件反复手改）。**复发时抓捕方案**：先挂 5 秒轮询盯 server_port 值变化
+  （记录精确时刻），归零瞬间立即拉 `docker compose logs --since 2m | grep -v
+  level/status` 对照 HTTP；若仍无对应请求，用容器内 `strace -f -e trace=openat -p
+  <面板PID>` 追写入者
 - 正确的配置回滚路径：面板备份库 zip → 仅提取配置文件覆盖（不回滚存档），
   当前态另存 `.pre-restore` 后缀
 
