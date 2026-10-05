@@ -13,6 +13,12 @@
 #   STEAM_API_KEY      模组搜索用的 Steam Web API key（https://steamcommunity.com/dev/apikey
 #                      免费申请）。也可写入挂载的 config.yml steamAPIKey 字段。
 #                      建议放在 docker-compose.override.yml（不入库）
+#
+# 网络环境（模组/游戏内容下载走 Steam CDN *.steamcontent.com，国内直连时好时坏）：
+#   - 海外网络：无需任何配置
+#   - 代理客户端开 TUN/增强模式（虚拟网卡接管全局流量）：容器自动被代理，无需配置
+#   - 代理仅"系统代理"模式：容器感知不到系统代理，需在 environment 显式配置
+#     HTTP_PROXY/HTTPS_PROXY（见下方注释块，取消注释并改成你的端口）
 services:
   dst-mac-server:
     image: dst-mac-server:dev
@@ -26,6 +32,14 @@ services:
     environment:
       # 模组搜索用 Steam API key（推荐放 override 文件，勿提交真实值）
       - STEAM_API_KEY=${STEAM_API_KEY:-}
+      #
+      # —— 代理（仅"系统代理"模式的客户端需要；海外 / TUN 模式用户保持注释即可）——
+      # host.docker.internal 指向宿主机；端口改成你代理的实际端口。
+      # NO_PROXY 白名单 = 直连已验证可达的域名，代理离线时面板搜索/详情不受影响，
+      # 仅下载类操作需要代理在线。
+      # - HTTP_PROXY=http://host.docker.internal:7890
+      # - HTTPS_PROXY=http://host.docker.internal:7890
+      # - NO_PROXY=localhost,127.0.0.1,api.steampowered.com,images.steamusercontent.com,steamcdn-a.akamaihd.net,ver.tugos.cn
     volumes:
       # 面板持久化数据：dst_config、password.txt、sqlite 数据库(dst-db)、
       # 存档(DoNotStarveTogether/)、备份(backup/)、模组缓存(mod/)

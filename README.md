@@ -74,6 +74,8 @@ docker run -d --name dst-mac-server \
 | `DST_DIR` | `/app/dst-dedicated-server` | 游戏安装目录（容器内路径固定勿改；如需换位置只调整挂载的宿主机侧路径） |
 | `DST_FORCE_UPDATE` | 未设置 | 设为 `1` 时启动即执行一次增量更新 |
 | `SKIP_GAME_INSTALL` | 未设置 | 设为 `1` 跳过游戏安装，只启动面板（调试用） |
+| `HTTP_PROXY` / `HTTPS_PROXY` | 未设置 | 模组/游戏下载走宿主机代理。仅当代理客户端是"系统代理"模式时需要；海外网络与 TUN/增强模式无需设置（见下方 FAQ） |
+| `NO_PROXY` | 未设置 | 直连域名白名单：代理离线时保障面板搜索/模组详情仍可用，仅下载类操作受影响。推荐值见 `docker-compose.yml` 模板注释 |
 
 ### 数据卷
 
@@ -96,7 +98,13 @@ docker run -d --name dst-mac-server \
 
 **首次开服很慢？** 游戏以 x86_64 运行、box64 转译执行，世界首次生成需要几分钟预热，属正常现象，之后会明显变快。
 
-**游戏下载失败 / 报 BadGateway？** DepotDownloader 从 Steam CDN 下载，个别节点在部分网络环境下不可用会自动重试；多次失败请检查网络对 Steam CDN 的可达性（代理环境可给 Docker 配置代理），或重启容器重试（下载进度按 chunk 保留）。
+**模组/游戏下载失败（提示网络问题，或下载卡住不动）？** 模组搜索与详情走 `api.steampowered.com`，国内直连可用；而模组与游戏内容的**下载**走 Steam CDN（`*.steamcontent.com`），国内直连时好时坏（不同运营商/时段差异很大）。按你的情况三选一：
+
+1. **海外网络，或代理客户端开了 TUN/增强模式**（虚拟网卡接管全局流量，容器自动被代理）——无需任何配置；
+2. **代理仅"系统代理"模式**——Docker 容器感知不到宿主机的系统代理，需在 `docker-compose.yml` 的 `environment` 里取消注释代理三行（`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`）并改成实际端口，然后 `docker compose up -d` 重建容器生效；
+3. **完全无代理**——下载类功能视网络运气；模组可用面板「手动添加模组」兜底（他人代下载 zip 后导入模组缓存目录）。
+
+下载进度按 chunk 保留，网络恢复后重试即续传，无需从头下载。
 
 **如何切换测试分支（updatebeta）？** 在面板集群配置中开启 Beta 选项，游戏会安装到平行的 `-beta` 目录，互不影响。
 
