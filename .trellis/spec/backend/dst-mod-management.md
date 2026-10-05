@@ -90,6 +90,36 @@ box64/steamclient 下游戏启动时的创意工坊自下载慢且不稳（`ODPF
 3. "删了又出现" → C2：检查是否游戏运行中/之后启动过（写回），并确认 modoverrides 已无该模组
 4. "拷进去的模组不生效" → C4：WorkshopID.txt 存在？目录层级 content/322330/<id>？
 5. "删了列表还在" → C3：是否只清了一个 shard？ACF 两个 shard 都查
+6. "下载报网络问题" → 先看服务日志有无「正在执行 DepotDownloader」：无 = Steam API 段挂（见 §下载链路的网络契约）；有但卡 manifest = CDN 段挂（代理）
+7. "下载显示成功但文件不存在" → 查 mod_infos.mod_config 是否为 '{}'（旧版静默落库脏记录，2026-10-05 已修复为如实报错）
+
+## 下载链路的网络契约（2026-10-05 实测沉淀）
+
+- **Steam Web API 调用必须 HTTPS**（明文 `http://api.steampowered.com` 在国内网络会被掐，
+  面板报"模组更新失败: 请求Steam API失败"，且 DepotDownloader 根本不会被执行）
+- **STEAM_API_KEY 必须真实进入容器 env**：改 docker-compose.override.yml 后必须
+  `docker compose up -d` recreate——`restart` 不重读配置、不注入 env（实测踩坑：
+  容器创建早于 override 配置，key 沉默缺失数日）
+- **DD 下载 pubfile 必须带 `-app 322330`**（steam 包 `workshopAppID`）：省略时 DD
+  需联网反查 pubfile 归属，反查失败即报 "-app not specified" 直接拒跑
+- **Steam CDN（\*.steamcontent.com）国内直连时好时坏**：容器注入 `HTTP_PROXY/HTTPS_PROXY`
+  走宿主机代理（`host.docker.internal:<port>`；面板 Go 与 dotnet DD 均认环境变量），
+  `NO_PROXY` 白名单放直连已验证可达的域名（api.steampowered.com、
+  steamcdn-a.akamaihd.net、ver.tugos.cn），代理离线时仅下载类操作受影响；
+  代理客户端 TUN/增强模式则零配置。compose 模板有注释好的三行可选配置
+- **连通性测试勿用 steamcontent.com 老域名**：cache1-bjtel.steamcontent.com 等在
+  Valve 权威 DNS 已 NXDOMAIN（2025-07 SOA），拿它当测试目标只会得出误导性结论
+- **不同 manifest 可能落在不同 CDN host**：单个模组卡 "Connection timeout downloading
+  depot manifest" 时先重试（新的 manifest request code 可能换 host），持续失败换代理节点
+
+## 模组落库的诚实性契约（2026-10-05 修复）
+
+下载失败禁止静默落库：`getModInfoConfig`/`getV1ModInfoConfig`/`readModInfo` 任一环节
+失败（DD 报错、v1 文件下载/解压失败、产物缺 modinfo.lua）必须返回 error，由
+`buildModConfig` 统一入口向上传播——上游语义是失败返回空 map、外层照样建
+`mod_config="{}"` 的 DB 记录并返回成功，页面假成功但磁盘无产物（实测产生过脏记录）。
+批量更新（`UpdateAllModInfos`）保持"单模组失败不拖垮整批"（goroutine 内忽略错误），
+但不再把失败模组的旧配置覆写为空。
 
 ## CDN-zip 型老模组的加载出路（2026-09-21 实测）
 
