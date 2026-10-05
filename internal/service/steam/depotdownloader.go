@@ -16,6 +16,9 @@ import (
 const (
 	// dstAppID 饥荒联机版专用服务器 Steam AppID
 	dstAppID = "343050"
+	// workshopAppID 饥荒联机版创意工坊 AppID（pubfile 下载必带 -app：
+	// 省略时 DD 需联网反查 pubfile 归属，反查失败即报 "-app not specified"）
+	workshopAppID = "322330"
 	// betaBranch 正式服测试分支（上游 steamcmd 的 -beta updatebeta 语义）
 	betaBranch = "updatebeta"
 	// envKey 环境变量名，优先级最高的 DepotDownloader 可执行文件路径
@@ -64,7 +67,7 @@ func buildAppArgs(dir string, beta bool) []string {
 
 // buildPubfileArgs 构造创意工坊物品下载参数数组
 func buildPubfileArgs(modID string, dir string) []string {
-	return []string{"-pubfile", modID, "-dir", dir}
+	return []string{"-pubfile", modID, "-app", workshopAppID, "-dir", dir}
 }
 
 // run 执行 DepotDownloader，stdout/stderr 合流转发到面板日志。

@@ -34,7 +34,7 @@ with open('steamapikey.txt', 'r', encoding='utf-8') as key_value:
 
 def search_mod_list(text='', page=1, num=25): 
 
-    url = 'http://api.steampowered.com/IPublishedFileService/QueryFiles/v1/'
+    url = 'https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/'
     data = {
         'page': page,
         'key': steamapikey,  # steam apikey  https://steamcommunity.com/dev/apikey
@@ -91,7 +91,7 @@ def search_mod_list(text='', page=1, num=25):
 
 def get_mod_base_info(modId: int):
 
-    url = 'http://api.steampowered.com/IPublishedFileService/GetDetails/v1/'
+    url = 'https://api.steampowered.com/IPublishedFileService/GetDetails/v1/'
     data = {
         'key': steamapikey,  # steam apikey  https://steamcommunity.com/dev/apikey
         'language': 6,  # 0英文，6简中，7繁中

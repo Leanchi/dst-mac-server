@@ -96,7 +96,7 @@ func TestBuildAppArgs(t *testing.T) {
 
 func TestBuildPubfileArgs(t *testing.T) {
 	dir := "/data/mod/steamapps/workshop/content/322330/362175979"
-	want := []string{"-pubfile", "362175979", "-dir", dir}
+	want := []string{"-pubfile", "362175979", "-app", "322330", "-dir", dir}
 	got := buildPubfileArgs("362175979", dir)
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("参数数组不符\nwant: %v\ngot:  %v", want, got)
@@ -133,7 +133,7 @@ func TestDownloadPubfileRunsFakeBinary(t *testing.T) {
 		t.Fatalf("DownloadPubfile 执行失败: %v", err)
 	}
 
-	want := []string{"-pubfile", "362175979", "-dir", dir}
+	want := []string{"-pubfile", "362175979", "-app", "322330", "-dir", dir}
 	if got := recordedArgs(t); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("实际执行参数不符\nwant: %v\ngot:  %v", want, got)
 	}
